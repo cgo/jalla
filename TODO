@@ -1,0 +1,8 @@
+
+Zu tun
+------
+Sun Apr 10 23:45:36 2011: MMM weiter ausbauen
+                          Vektoren dazu
+                          Tests schreiben (QuickCheck!)
+                          Link mit lapacke funktionierte noch nicht.
+                          Matrizen benutzen fuer Kameras / simplen Volumenrenderer

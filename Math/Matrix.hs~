@@ -1,0 +1,10 @@
+module Math.Matrix 
+       ( ) where
+
+import BLAS.Foreign.BLAS
+
+type Index = Int
+type Shape = (Index,Index)
+
+class Matrix m e where
+  matrix :: 

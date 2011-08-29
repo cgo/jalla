@@ -1,0 +1,14 @@
+module Math.Internal where
+
+
+{-| Maps a function over a contiguous (C) array, storing the result in another C array (in place!),
+therefore being unsafe. Internal use only. -}
+unsafePtrMap :: (Convertible e he, Convertible he e, Integral i) => 
+               (he -> he) -- ^ Function to map over the C array
+               -> Ptr e   -- ^ Pointer to the array to map over
+               -> Ptr e   -- ^ Pointer to the destination array
+               -> i       -- ^ Number of elements to process
+               -> IO () 
+unsafePtrMap f p1 p2 n | n > 0 = fmap (convert . f . convert) (peek p1) >>= poke p2 >> unsafePtrMap f (advancePtr p1 1) (advancePtr p2 1) (n-1)
+                       | otherwise = return ()
+

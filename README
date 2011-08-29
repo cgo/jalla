@@ -1,0 +1,45 @@
+Jalla is a Haskell wrapper for cblas and lapacke, a C interface for LAPACK written by Intel.
+Jalla is written and maintained by Christian Gosch (github at goschs dot de) and
+was started as a little project to learn Haskell.
+
+Jalla (probably) needs ghc, it has not been tested with other Haskell implementations.
+It is developed with ghc > 7.0.
+
+You need to have CBLAS and LAPACK installed, e.g. by installing ATLAS generated libraries
+on you computer. 
+In Ubuntu, there are packages for CBLAS and LAPACK which you can install with apt-get,
+synaptic, or any other such tool.
+Lapacke must be compiled "by hand".
+
+0. Get the jalla sources; say they are located in the directory "jalla/"
+1. Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
+   or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
+2. Unpack lapacke into "jalla/lapacke"
+3. Follow lapacke's instructions to build
+4. In jalla/, call 
+    cabal configure
+    cabal build
+    cabal haddock
+5. Look at the (currently somewhat sparse) generated documentation
+
+Please contact the author at github at goschs dot de if anything does not work!
+
+
+Documentation
+-------------
+The haddock documentation is not complete and rather sparse.
+This will change.
+
+
+Status
+------
+The code may change in some places, and will definitely be growing as soon as I need more functionality.
+Please let me know if you have suggestions.
+
+Please also tell me if you have a greater interest in this project and want to participate!
+
+
+License
+-------
+See the file LICENSE.
+This project is under a BSD3-style license.

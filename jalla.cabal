@@ -1,0 +1,53 @@
+name: jalla
+version: 0.1
+cabal-version: >=1.2
+build-type: Simple
+license: BSD3
+license-file: LICENSE
+copyright:
+maintainer:
+build-depends: ffi -any, base >=4, haskell98 -any, mtl -any,
+               convertible -any, array -any
+stability:
+homepage:
+package-url:
+bug-reports:
+synopsis:
+description:
+category: Math
+author: Christian Gosch
+tested-with:
+data-files:
+data-dir: ""
+extra-source-files:
+extra-tmp-files:
+exposed-modules: Math.Indexable Math.IMM Math.InnerProduct
+                 BLAS.Foreign.BLAS BLAS.Foreign.BlasOps BLAS.Foreign.LAPACKE
+                 BLAS.Foreign.LapackeOps Math.Matrix Math.Vector Math.Types
+exposed: True
+buildable: True
+build-tools: c2hs -any
+cpp-options:
+cc-options:
+ld-options:
+pkgconfig-depends:
+frameworks:
+c-sources:
+default-language:
+other-languages:
+default-extensions:
+other-extensions:
+extensions:
+extra-libraries: cblas lapack lapacke
+extra-lib-dirs: /home/christian/pgm/jalla/lapacke
+includes:
+install-includes:
+include-dirs: /home/christian/pgm/jalla/lapacke/include
+hs-source-dirs: .
+other-modules: C2HS Math.Internal
+ghc-prof-options:
+ghc-shared-options:
+ghc-options:
+hugs-options:
+nhc98-options:
+jhc-options:
