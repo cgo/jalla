@@ -1,12 +1,12 @@
 name: jalla
 version: 0.1
-cabal-version: >=1.2
+cabal-version: (>=1.2)
 build-type: Simple
 license: BSD3
 license-file: LICENSE
 copyright:
 maintainer:
-build-depends: ffi -any, base >=4, haskell98 -any, mtl -any,
+build-depends: base (>=4), haskell98 -any, mtl -any,
                convertible -any, array -any
 stability:
 homepage:
