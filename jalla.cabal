@@ -38,7 +38,7 @@ other-languages:
 default-extensions:
 other-extensions:
 extensions:
-extra-libraries: cblas lapack lapacke
+extra-libraries: lapacke cblas lapack
 extra-lib-dirs: /home/christian/pgm/jalla/lapacke
 includes:
 install-includes:
