@@ -1,11 +1,15 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances,
-             GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts #-}
+             GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts, UndecidableInstances, RankNTypes, ExistentialQuantification #-}
 
 module Math.Matrix
        (
          -- * Classes
          GMatrix(..),
          CMatrix(..),
+         -- ** Matrix/matrix operations
+         MatrixMatrix(..),
+         -- ** Matrix/vector operations
+         MatrixVector(..),
 
          -- * Data types
          Order(..),
@@ -19,7 +23,7 @@ module Math.Matrix
         MMM,
          -- ** Functions from IMM can be used
         module Math.IMM,
-        -- ** Additional functions for CMatrix
+        -- ** Additional MMM functions for CMatrix
         createMatrix,
         modifyMatrix,
         getMatrix,
@@ -35,6 +39,8 @@ module Math.Matrix
         idMatrix,
         pseudoInverse,
         matrixAssocs,
+        matrixMap,
+        matrixBinMap,
 
         -- * General functions
         checkIndex,
@@ -50,7 +56,6 @@ module Math.Matrix
         -- * Low level IO matrix functions
         matrixAlloc',
         matrixElem,
-        matrixMap,
         matrixMult,
 
         -- * Unsafe manipulations
@@ -59,6 +64,8 @@ module Math.Matrix
         unsafeMatrixFill,
         unsafeMatrixCopy,
         unsafeSolveLinearSystem,
+        unsafeMatrixMap,
+        unsafeMatrixBinMap,
 
         -- * Re-exported
         CFloat,
@@ -82,6 +89,7 @@ import Foreign.Marshal.Array
 import Foreign
 import Ix
 import Data.Complex
+import Data.List (partition)
 import Math.Types
 import Control.Monad.State
 import qualified Data.Tuple as T (swap)
@@ -131,11 +139,13 @@ class (Field1 e, Indexable (mat e) IndexPair e) => GMatrix mat e where
 class (Field1 e, GMatrix mat e) => MatrixMatrix mat e where
   (##) :: mat e -> mat e -> mat e
   (##!) :: (Transpose, mat e) -> (Transpose, mat e) -> mat e
+  (##+) :: mat e -> mat e -> mat e
+  (##-) :: mat e -> mat e -> mat e
 
 
 class MatrixVector mat vec e where
   (#|) :: mat e -> vec e -> vec e
-  (-#) :: vec e -> mat e -> vec e
+  (|#) :: vec e -> mat e -> vec e
 
 
 {-| Interface for matrices with underlying contiguous C array storage.
@@ -146,6 +156,76 @@ class (GMatrix mat e) => CMatrix mat e where
   lda         :: mat e -> Index
   order       :: mat e -> Order
 
+
+
+{-| Map over a CMatrix. 
+Applies the given function to each element in the matrix and returns the resulting matrix. -}
+matrixMap :: (Storable e1, Storable e2, CMatrix mat1 e1, CMatrix mat2 e2) => (e1 -> e2) -> mat1 e1 -> mat2 e2
+matrixMap f mat = unsafePerformIO $ let s = shape mat in 
+                  matrixAlloc s >>= \m -> unsafeMatrixMap f mat m >> return m
+
+matrixBinMap :: (Storable e1, Storable e2, Storable e3, CMatrix mat1 e1, CMatrix mat2 e2, CMatrix mat3 e3) => (e1 -> e2 -> e3) -> mat1 e1 -> mat2 e2 -> mat3 e3
+matrixBinMap f mat1 mat2 = unsafePerformIO $ do
+                             let (m1,n1) = shape mat1
+                                 (m2,n2) = shape mat2
+                             m <- matrixAlloc (min m1 m2, min n1 n2) 
+                             unsafeMatrixBinMap f mat1 mat2 m
+                             return m
+                                               
+
+
+
+data CMatrixContainer = forall mat a. CMatrix mat a => CMatrixContainer (mat a)
+
+-- This function finds the quadruples (a,b,c,d) for each matrix,
+-- saying that: go through /a/ elements using /b/ as increment, then
+-- increment the pointer (from the start of the line) using increment /d/,
+-- and do that /c/ times. Naturally, (a,b) should be equal for all matrices
+-- if they have the same shape.
+-- If more of the matrices are RowMajor than ColumnMajor, the returned 
+-- iteration order will be row-wise, otherwise it will be column-wise.
+-- These functions are used in unsafeMatrixMap and friends.
+lengthAndInc' :: [CMatrixContainer] -> [(Index, Index, Index, Index)]
+lengthAndInc' mas = if nr > nc then as else bs
+    where
+      as = map lengthAndInc'' mas
+      lengthAndInc'' (CMatrixContainer a) = lengthAndInc a
+      bs = map flipit as
+      flipit (a,b,c,d) = (b,a,d,c)
+      (rm,cm) = partition (== RowMajor) os
+      (nr,nc) = (length rm, length cm)
+      os = map (\(CMatrixContainer m) -> order m) mas
+lengthAndInc :: forall mat a. (CMatrix mat a) => mat a -> (Index, Index, Index, Index)
+lengthAndInc ma = case o of
+                    RowMajor -> (n,m,1,ldA)
+                    _ -> (n,m,ldA,1)
+    where o = order ma
+          (m,n) = shape ma
+          ldA = lda ma
+
+
+unsafeMatrixMap :: (Storable e1, Storable e2, CMatrix mat1 e1, CMatrix mat2 e2) => (e1 -> e2) -> mat1 e1 -> mat2 e2 -> IO ()
+unsafeMatrixMap f mat mat' = 
+    let 
+        [(n1,m1,i11,i12),(n2,m2,i21,i22)] = lengthAndInc' [CMatrixContainer mat, CMatrixContainer mat']
+   in
+    withCMatrix mat $ \matp -> do
+      withCMatrix mat' $ \mat'p ->
+          unsafePtrMapInc2 (i11,i12) (i21,i22) f matp mat'p ((min n1 n2),(min m1 m2))
+
+
+unsafeMatrixBinMap :: (Storable e1, Storable e2, Storable e3, CMatrix mat1 e1, CMatrix mat2 e2, CMatrix mat3 e3) => (e1 -> e2 -> e3) -> mat1 e1 -> mat2 e2 -> mat3 e3 -> IO ()
+unsafeMatrixBinMap f mat mat' mat'' = 
+    let 
+        [(n1,m1,i11,i12),(n2,m2,i21,i22),(n3,m3,i31,i32)] = lengthAndInc' [CMatrixContainer mat, CMatrixContainer mat', CMatrixContainer mat'']
+   in
+    withCMatrix mat $ \matp ->
+    withCMatrix mat' $ \mat'p ->
+    withCMatrix mat'' $ \mat''p ->
+          unsafe2PtrMapInc2 (i11,i12) (i21,i22) (i31,i32) f matp mat'p mat''p ((minimum [n1,n2,n3]),(minimum [m1,m2,m3]))
+
+
+               
 
 
 {- (Un?)gluecklicherweise kann man das nicht machen. StorableArray ist nicht garantiert
@@ -193,13 +273,17 @@ instance (Num e, Field1 e, BlasOps e) => GMatrix Matrix e where
   shape = matShape
   -- m ! ij = unsafePerformIO $ matrixElem m ij
 
-instance (BlasOps e) => MatrixMatrix Matrix e where
+-- BIG WARNING!
+-- FIXME: This needs UndecidableInstances, which is not very good! How can I do this better?
+instance (BlasOps e, GMatrix mat e, CMatrix mat e) => MatrixMatrix mat e where
   m1 ## m2 | colCount m1 /= rowCount m2 = error "(##): shape mismatch!"
            | otherwise = unsafePerformIO $ matrixMult 1 NoTrans m1 NoTrans m2
   (t1,m1) ##! (t2,m2) | colCountTrans t1 s1 /= rowCountTrans t2 s2 = error "(##): shape mismatch!"
                       | otherwise = unsafePerformIO $ matrixMult 1 t1 m1 t2 m2
                           where s1 = shape m1
                                 s2 = shape m2
+  m1 ##+ m2 = matrixBinMap (\a b -> a + b) m1 m2
+  m1 ##- m2 = matrixBinMap (\a b -> a - b) m1 m2
 
 
 instance BlasOps e => Indexable (Matrix e) IndexPair e where
@@ -282,6 +366,9 @@ unsafeMatrixMult alpha transA a transB b beta c =
       ldC     = lda c
       transA' = toBlas transA
       transB' = toBlas transB
+
+
+-- unsafeMatrixAdd :: (BlasOps e, CMatrix mat e) =>
 
 
 
@@ -431,8 +518,8 @@ matrixCopy :: (BlasOps e, CMatrix mat e) => mat e -> IO (mat e)
 matrixCopy a = matrixAlloc (shape a) >>= \ret -> unsafeMatrixCopy a ret >> return ret
 
 
-matrixMap :: (BlasOps e1, BlasOps e2, CMatrix mat1 e1, CMatrix mat2 e2) => (e1 -> e2) -> mat1 e1 -> IO (mat2 e2)
-matrixMap f mat = matrixAlloc s >>= \mRet ->
+matrixMap' :: (BlasOps e1, BlasOps e2, CMatrix mat1 e1, CMatrix mat2 e2) => (e1 -> e2) -> mat1 e1 -> IO (mat2 e2)
+matrixMap' f mat = matrixAlloc s >>= \mRet ->
   withCMatrix mat $ \p1 ->
   withCMatrix mRet $ \p2 ->
   unsafePtrMap f p1 p2 n >> return mRet
@@ -456,6 +543,7 @@ matrixLists mat = let (r,c) = shape mat
                   in [[mat ! (i,j) | j <- [0..(c-1)]] | i <- [0..(r-1)]]
 
 
+-- FIXME: The use of length in here is not very good.
 {-| Create a matrix from a list of elements, stored in row-major. -}
 listMatrix :: (BlasOps e, CMatrix mat e) =>
            Shape -- ^ Shape of the matrix
