@@ -4,12 +4,12 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Math.Vector
--- Copyright   :
+-- Copyright   :  2011 by Christian Gosch
 -- License     :  BSD3
 --
--- Maintainer  :
--- Stability   :
--- Portability :
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
 --
 -- |
 --
@@ -18,9 +18,12 @@
 module Math.Vector (
     -- * Vector classes
     GVector(..),
-    Vector(..),
     CVector(..),
-
+    -- * Vector/vector operations
+    VectorVector(..),
+    -- * Vector instance
+    Vector(..),
+    
     -- * Functions from indexable
     module Math.Indexable,
     -- * Monadic, efficient vector modification
@@ -28,13 +31,25 @@ module Math.Vector (
     -- ** Functions from IMM can be used
     module Math.IMM,
     -- ** Additional functions for CVector types
+    listVector,
+    vectorList,
     createVector,
     modifyVector,
     getVector,
     vectorAdd,
+    vectorMap,
+    vectorBinMap,
     -- * Inner product
-    module Math.InnerProduct
+    module Math.InnerProduct,
+    
+    -- * Low-level, unsafe functions
+
+    -- * Re-exported
+    CFloat,
+    CDouble,
+    Complex
 ) where
+
 
 import BLAS.Foreign.BLAS
 import BLAS.Foreign.BlasOps
@@ -67,13 +82,24 @@ class (BlasOps e, GVector vec e) => CVector vec e where
   inc :: vec e -> Index
 
 
+{-| Vector/vector operations. -}
+class (CVector vec e) => VectorVector vec e where
+  -- | Vector addition
+  (||+) :: vec e -> vec e -> vec e
+  -- | Vector subtraction
+  (||-) :: vec e -> vec e -> vec e
+
+
+{-| Vector is the 'CVector' type that is used in Jalla. 
+Somehow Haddock does not want to create documentation for the class instances 
+of 'Vector', I try to figure it out. -}
 data BlasOps e => Vector e = Vector {vecP :: !(ForeignPtr e),
                                     vecInc :: !Index,
                                     vecLength :: !Index}
 
 
 vectorAlloc' :: (BlasOps e) => Index -> IO (Vector e)
-vectorAlloc' n = mallocArray n >>= newForeignPtr finalizerFree >>= \fp -> return $ Vector fp 1 n
+vectorAlloc' n = mallocForeignPtrArray n >>= \fp -> return $ Vector fp 1 n
 
 
 instance (BlasOps e) => GVector Vector e where
@@ -82,6 +108,7 @@ instance (BlasOps e) => GVector Vector e where
     -- v1 -| v2 = innerProduct v1 v2
 
 
+{-| 'CVector' instance for 'Vector'. -}
 instance BlasOps e => CVector Vector e where
     vectorAlloc = vectorAlloc'
     withCVector = withForeignPtr . vecP
@@ -92,15 +119,98 @@ instance BlasOps e => Indexable (Vector e) Index e where
     v ! i = unsafePerformIO $ unsafeGetElem v i
 
 
+instance BlasOps e => VectorVector Vector e where
+  v1 ||+ v2 = modifyVector v1 $ vectorAdd 1 v2
+  v1 ||- v2 = modifyVector v1 $ vectorAdd (-1) v2
+
+
+vectorList :: GVector vec e => vec e -> [e]
+vectorList v = map (v !) [0..n-1] where n = vectorLength v
+
+listVector :: (CVector vec e) => [e] -> vec e
+listVector es = createVector n $ setElems ies
+  where n = length es
+        ies = zip [0..n-1] es
+
+
+instance (BlasOps e, Eq e) => Eq (Vector e) where
+  a /= b | vectorLength a == vectorLength b = or [x /= y | (x,y) <- zip (vectorList a) (vectorList b)]
+        | otherwise = False
+
+
+instance (BlasOps e, Show e) => Show (Vector e) where
+  show v = "vectorList " ++ show (vectorList v)
+
+
+{-| /Num/ instance for a /Vector/. 
+The operations are all /element-wise/. There may be the occasional error
+by wrongly assuming that /(*)/ returns the inner product, which it doesn't.
+This instance is basically only provided to get the + and - operators,
+and to be able to use /sum/ and the like. -}
+instance (BlasOps e, Num e) => Num (Vector e) where
+  a + b         = modifyVector a $ vectorAdd 1 b
+  a - b         = modifyVector a $ vectorAdd (-1) b
+  a * b         = vectorBinMap (*) a b
+  negate        = vectorMap (* (-1))
+  abs           = vectorMap abs
+  signum        = vectorMap signum
+  fromInteger i = createVector 1 $ setElem 1 (fromIntegral i)
+  
+  
 instance (BlasOps e, BlasOpsReal e, CVector vec e) => InnerProduct (vec e) e where
     innerProduct = innerProductReal
-
---instance CVector vec CDouble => InnerProduct (vec CDouble) CDouble where
---    innerProduct = innerProductReal
 
 instance (RealFloat e, BlasOpsComplex e, CVector vec (Complex e)) =>
     InnerProduct (vec (Complex e)) (Complex e) where
     innerProduct = innerProductC
+
+
+{-| Maps a unary function over the elements of a vector and returns the resulting vector. -}
+vectorMap :: (CVector vec1 e1, CVector vec2 e2) => (e1 -> e2) -> vec1 e1 -> vec2 e2
+vectorMap f v1 = unsafePerformIO $
+                 vectorAlloc n >>= \v2 -> unsafeVectorMap f v1 v2 >> return v2
+  where n = vectorLength v1
+                                          
+
+
+unsafeVectorMap :: (CVector vec1 e1, CVector vec2 e2) => (e1 -> e2) -> vec1 e1 -> vec2 e2 -> IO ()
+unsafeVectorMap f v1 v2 = 
+  withCVector v1 $ \v1p ->
+  withCVector v2 $ \v2p ->
+  unsafePtrMapInc i1 i2 f v1p v2p n
+  where
+    i1 = inc v1
+    i2 = inc v2
+    n = min (vectorLength v1) (vectorLength v2)
+
+
+{-| Maps a binary function to the elements of two vectors and returns the resulting vector. -}
+vectorBinMap :: (CVector vec1 e1, CVector vec2 e2, CVector vec3 e3) => 
+                (e1 -> e2 -> e3)    -- ^ The function /f/ to map.
+                -> vec1 e1 -- ^ The first input vector /v1/ for /f/.
+                -> vec2 e2 -- ^ The second input vector /v2/ for /f/.
+                -> vec3 e3 -- ^ The result vector. It will have length min(l1,l2), where l1,l2 are the lengths of /v1/ and /v2/.
+vectorBinMap f v1 v2 = unsafePerformIO $
+                       vectorAlloc n >>= \v3 -> unsafeVectorBinMap f v1 v2 v3 >> return v3
+  where n = min (vectorLength v1) (vectorLength v2)
+
+
+unsafeVectorBinMap :: (CVector vec1 e1, CVector vec2 e2, CVector vec3 e3) => 
+                      (e1 -> e2 -> e3) 
+                      -> vec1 e1 
+                      -> vec2 e2 
+                      -> vec3 e3 
+                      -> IO ()
+unsafeVectorBinMap f v1 v2 v3 = 
+  withCVector v1 $ \v1p ->
+  withCVector v2 $ \v2p ->
+  withCVector v3 $ \v3p -> 
+  unsafe2PtrMapInc i1 i2 i3 f v1p v2p v3p n
+  where
+    i1 = inc v1
+    i2 = inc v2
+    i3 = inc v3
+    n = minimum [(vectorLength v1), (vectorLength v2), vectorLength v3]
 
 
 innerProductReal :: (BlasOpsReal e, CVector vec e) => vec e -> vec e -> e
@@ -152,19 +262,24 @@ unsafeSetElem v i e | i >= 0 && i < vectorLength v = withCVector v $
 unsafeSetElem _ _ _ | otherwise = error "unsafeSetElem: out of bounds."
 
 unsafeGetElem :: (BlasOps e, CVector vec e) => vec e -> Index -> IO e
-unsafeGetElem v i | i >= 0 && i < vectorLength v = withCVector v $
-    \p -> peek p >>= \e1 ->
-         let p' = p `plusPtr` (i * sizeOf e1 * (inc v)) in peek p'
+unsafeGetElem v i | i >= 0 && i < vectorLength v = withCVector v $ \p -> do
+    e1 <- peek p
+    let p' = p `plusPtr` (i * sizeOf e1 * (inc v))
+    peek p'
 unsafeGetElem _ _ | otherwise = error "unsafeGetElem: out of bounds."
 
 
 unsafeFillVector :: (BlasOps e, CVector vec e) => vec e -> e -> IO ()
 unsafeFillVector v e =
     withCVector v $ \p ->
-    unsafePtrMap1Inc i (\_ -> e) p n
-    where
-        i = inc v
-        n = vectorLength v
+    unsafePtrMap1Inc i (const e) p n
+  where
+    -- Using /f/ instead of the unsafePtrMap1Inc should be /slightly/ more efficient,
+    -- but it is a good idea to have such dirty functions in a central place.
+--    f _ _ 0 = return ()
+--    f i p n = poke p e >> f i (advancePtr p i) (n - 1) where {p' = advancePtr p i; n' = n - 1 }
+    i = inc v
+    n = vectorLength v
 
 
 {-| Make a copy of the input vector. Using the cblas_*copy functions. -}
@@ -226,10 +341,8 @@ setElems' ies = VMM $ (get >>= \v -> liftIO $ mapM_ (\(i,e) -> unsafeSetElem v i
 
 {-| Note: getElem' returns a Maybe. -}
 getElem' :: CVector vec e => Index -> VMM s vec e e
-getElem' i = VMM $ (get >>= \v -> return $ unsafePerformIO $ unsafeGetElem v i)
+getElem' i = VMM $ get >>= \v -> liftIO (unsafeGetElem v i)
 
 fill' :: CVector vec e => e -> VMM s vec e ()
-fill' e = VMM $ (get >>= \v -> return $ unsafePerformIO $ unsafeFillVector v e)
+fill' e = VMM $ get >>= \v -> liftIO (unsafeFillVector v e)
 
---innerProduct :: (BlasOps e, CVector vec e) => vec e -> vec e -> e
---innerProduct = undefined

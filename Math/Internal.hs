@@ -1,3 +1,19 @@
+-----------------------------------------------------------------------------
+--
+-- Module      :  Math.Internal
+-- Copyright   :  2011 by Christian Gosch
+-- License     :  BSD3
+--
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
+--
+-- | This module contains functions for /internal use/ only.
+--   They all base on the manipulation of pointers, using functions from the /Foreign/
+--   module. They must be considered unsafe. Use only if you know what you are doing.
+-----------------------------------------------------------------------------
+
+
 module Math.Internal where
 
 import Foreign

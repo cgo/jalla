@@ -1,6 +1,21 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances,
              GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts, UndecidableInstances, RankNTypes, ExistentialQuantification #-}
 
+-----------------------------------------------------------------------------
+--
+-- Module      :  Math.Matrix
+-- Copyright   :  2011 by Christian Gosch
+-- License     :  BSD3
+--
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
+--
+-- | This is the matrix module of Jalla.
+-- 
+-----------------------------------------------------------------------------
+
+
 module Math.Matrix
        (
          -- * Classes
