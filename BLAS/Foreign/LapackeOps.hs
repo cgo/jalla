@@ -1,4 +1,20 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleContexts, FlexibleInstances, FunctionalDependencies #-}
+-----------------------------------------------------------------------------
+--
+-- Module      :  BLAS.Foreign.LapackeOps
+-- Copyright   :  2011 by Christian Gosch
+-- License     :  BSD3
+--
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
+--
+-- | Part of Jalla. This module contains the classes that define
+-- LAPACKE operations, and the instantiations for [Complex] CFloat and CDouble
+-- types. Some LAPACKE functions don't really fit the rest, namely tgex tgsen.
+-- They are, however, probably not needed.
+-----------------------------------------------------------------------------
+
 module BLAS.Foreign.LapackeOps 
        (LapackeOps(..), LapackeOpsReal(..), LapackeOpsComplex(..)) where
 

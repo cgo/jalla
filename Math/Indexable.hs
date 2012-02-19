@@ -3,15 +3,14 @@
 -----------------------------------------------------------------------------
 --
 -- Module      :  Math.Indexable
--- Copyright   :  Christian Gosch
+-- Copyright   :  2011 by Christian Gosch
 -- License     :  BSD3
 --
--- Maintainer  :
--- Stability   :
--- Portability :
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
 --
--- |
---
+-- | Indexable objects for Jalla.
 -----------------------------------------------------------------------------
 
 module Math.Indexable (

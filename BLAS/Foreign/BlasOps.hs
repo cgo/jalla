@@ -1,4 +1,19 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleContexts, FlexibleInstances, FunctionalDependencies #-}
+-----------------------------------------------------------------------------
+--
+-- Module      :  BLAS.Foreign.BlasOps
+-- Copyright   :  2011 by Christian Gosch
+-- License     :  BSD3
+--
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
+--
+-- | Part of Jalla. This module contains the classes that define
+-- BLAS operations, and the instantiations for [Complex] CFloat and CDouble
+-- types.
+-----------------------------------------------------------------------------
+
 module BLAS.Foreign.BlasOps
        (BlasOps(..), BlasOpsReal(..), BlasOpsComplex(..)) where
 

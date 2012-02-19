@@ -1,4 +1,16 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
+-----------------------------------------------------------------------------
+--
+-- Module      :  Math.Types
+-- Copyright   :  2011 by Christian Gosch
+-- License     :  BSD3
+--
+-- Maintainer  : Christian Gosch <werbung@goschs.de>
+-- Stability   : Experimental
+-- Portability : GHC only
+--
+-- | Contains some types used by Jalla, including some BLAS/LAPACK related ones.
+-----------------------------------------------------------------------------
 
 module Math.Types (
                    Field1(..),
@@ -55,19 +67,6 @@ instance (RealFloat a, Storable a) => Storable (Complex a) where
           i = imagPart c
 
 
-{- class (Storable e, Num e, Num he) => Field e he | e -> he where
-  toHs :: e -> he
-  toC :: he -> e
-
-instance Field CFloat Float where
-  toHs = realToFrac
-  toC = realToFrac
-
-instance Field CDouble Double where
-  toHs = realToFrac
-  toC = realToFrac -}
-
-
 class (Num e, Floating e) => Field1 e
 instance Field1 CFloat
 instance Field1 CDouble
@@ -75,14 +74,3 @@ instance Field1 (Complex CFloat)
 instance Field1 (Complex CDouble)
 
 
---instance (Field e he, RealFrac e, RealFrac he) => Field (Complex e) (Complex he) where
---  toHs (r :+ i) = (realToFrac r :+ realToFrac i)
---  toC (r :+ i) = (realToFrac r :+ realToFrac i)
-
-{- instance Field (Complex CFloat) (Complex Float) where
-  toHs (r :+ i) = (realToFrac r :+ realToFrac i)
-  toC (r :+ i) = (realToFrac r :+ realToFrac i)
-
-instance Field (Complex CDouble) (Complex Double) where
-  toHs (r :+ i) = (realToFrac r :+ realToFrac i)
-  toC (r :+ i) = (realToFrac r :+ realToFrac i) -}
