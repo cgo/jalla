@@ -1,6 +1,8 @@
 {-# LANGUAGE PackageImports #-}
 module Main where
 
+import Debug.Trace
+
 -- import qualified Data.ByteString as BS
 import Text.Parsec.Language
 import Text.Parsec.Char
@@ -90,6 +92,10 @@ toCFunction ret fname args =
                          | hsname' == "zscal" = ("scal", BZomplex)                                                             
                          | hsname' == "csscal" = ("scal'", BComplex)
                          | hsname' == "zdscal" = ("scal'", BZomplex)                                                
+                         | hsname' == "sgesvd" = ("gesvd", BSingle)
+                         | hsname' == "dgesvd" = ("gesvd", BDouble)
+                         | hsname' == "cgesvd" = ("gesvd", BComplex)
+                         | hsname' == "zgesvd" = ("gesvd", BZomplex)
                          | headElem == 's' = (drop 1 hsname', BSingle)
                          | headElem == 'd' = (drop 1 hsname', BDouble)                                             
                          | headElem == 'c' = (drop 1 hsname', BComplex)                                             
@@ -123,11 +129,15 @@ toCFunction ret fname args =
 {- | Extracts all C function declarations from a C header file. -}
 cHeaderFile :: P PState
 cHeaderFile = do       
-  manyTill (try (skipMany cComment >> cFunDec) <|> skipLine) eof
+  cSpaces
+  manyTill (try (cPPDefine >> cSpaces >> return ()) <|> 
+            try (cTypedef >> cSpaces >> return ()) <|> 
+            try (cFunDec >> cSpaces >> return ()) <|> 
+            (skipLine >> cSpaces >> return ())) eof
   getState
   
 
-skipLine = anyChar `manyTill` try eol >> return ()
+skipLine = anyChar `manyTill` eol >> return ()
 
 cSpace = try (space >> return ()) 
          <|> eol
@@ -139,7 +149,20 @@ cComment = between (string "/*") (string "*/") $ many anyChar
 cPP = do
   cSpaces
   char '#'
-  anyChar `manyTill` try eol
+  anyChar `manyTill` eol
+
+cPPDefine = do
+  char '#'
+  spaces 
+  string "define"
+  cLineCont
+  
+cLineCont = ((char '\\' >> eol) <|> (anyChar >> return ())) `manyTill` ((satisfy (/= '\\')) >> eol)
+
+cTypedef = do
+  string "typedef"
+  spaces
+  cLineCont
 
 cIgnorables = skipMany $ choice [try (cComment >> return ()), try (cPP >> return ()), cSpace]
 
@@ -421,11 +444,14 @@ cFunDec = do
   fn <- cFunName <?> "cFunName"
   cSpaces
   args <- char '(' >> sepBy (cSpaces >> cArgument App.<* cSpaces) (char ',') >>= \r -> cSpaces >> char ')' >> return r
+  --when ("svd" `isSuffixOf` fn) $
   cSpaces
   char ';'
   when (fn `notElem` ignoreList) $
     modifyState (\(PState fs) -> let mf = toCFunction r fn args 
                                 in PState $ maybe fs (: fs) mf)
+  trace ("Found function " ++ fn ++ " with args " ++ unwords (map (\(a,b) -> a ++ " " ++ b) args)) $ return ()
+
   -- return $ r ++ fn ++ (concat args)
 
 cRetVal = cTypeIdent
@@ -498,7 +524,8 @@ main = do
       --classes = createClasses functions
   --writeClasses' classes
   --putStrLn $ show $ filterSimilarFunctions functions
-  printGroups $ filterSimilarFunctions functions
+  --mapM_ print $ map (\f -> (cfCName f, cfCommonName f)) functions
+  --printGroups $ filterSimilarFunctions functions
   writeFile "lapacke.chs" $ (concat . reverse . intersperse "\n") (map createC2hsFun functions)
 
 
