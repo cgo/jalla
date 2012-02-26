@@ -275,31 +275,6 @@ filterSimilarFunctions fns@(f:fs) = a : filterSimilarFunctions (map fst b)
     a = (f,Equal):a'
 
 
-data CClass = CClass { className :: String,
-                       classTypeVars :: [String],
-                       classFunctions :: [(CFunction,Similarity)] }
-
-
-filterClasses :: [[(CFunction,Similarity)]] -> [CClass]
-filterClasses = undefined
-
-{-
-filterSDCZ :: [[(CFunction,Similarity)]] -> [[(CFunction,Similarity)]]
-filterSDCZ a = filterClass a (\fslist -> all (==True) $ map (`elem` [BSingle,BDouble,BComplex,BZomplex]) (map (cfType . fst) fslist))
-
-
-filterClass :: [[(CFunction,Similarity)]] -> ([(CFunction,Similarity)] -> Bool) -> [[(CFunction,Similarity)]]
-filterClass groups f = classGroups $ zip members allTypeReplacements
-  where
-    members = filter f groups -- Alle Funktionen, die in die Klasse gehoeren
-    --replaceables :: [(String,String)]
-    --representatives :: [CFunction] -- Funktionsprototypen, die in die Klassendefinition geschrieben werden
-    --representatives = map getRepresentative members
-    allTypeReplacements = map getTypeReplacements members
-    classGroups ((group,replacement):rest) = g : classGroups (rest \\ g)
-      where g = (group,replacement) : filter (\a -> all (==True) $ map (`elem` replacement) (snd a)) rest
--}
-
 {-| Get an alist with the replacements from strings in the ArgDiff to type variables for a class definition. -}
 getTypeReplacements :: [(CFunction,Similarity)] -> [(String, String)]
 getTypeReplacements group = concatMap (uncurry replacements) $ zip allDistinctArgDiffs typeVars

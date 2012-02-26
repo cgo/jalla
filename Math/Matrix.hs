@@ -434,6 +434,8 @@ invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> 
 pseudoInverse :: (BlasOps e, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) => mat e -> Maybe (mat e)
 pseudoInverse mat = fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
 
+-- FIXME!
+-- svd :: (BlasOps e, LapackeOps e, CMatrix mat e) => mat e -> 
 
 unsafeInvert :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> IO (Maybe (mat e))
 unsafeInvert mat = withCMatrix mat $ \mp ->

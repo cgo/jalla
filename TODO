@@ -1,3 +1,10 @@
+26.2.2012
+---------
+parsenew.hs is creating the c2hs code in LAPACKE.chs now.
+Check that the char* -> String conversion is right! I do not know
+whether the LAPACKE char* arguments are null-terminated or not.
+
+
 
 Zu tun
 ------
