@@ -1,33 +1,173 @@
-{-# LANGUAGE PackageImports #-}
+{-
+  Somewhat newer wrapper generator for LAPACKE.
+  The thing that works is generating wrappers
+  for the LAPACKE functions via c2hs.
+  I have been playing with automatic generation of the type classes and instantiations
+  in this file, but it didn't work yet as I imagined it would. 
+  The parts that create a working input file for c2hs are at the beginning of
+  this source file, the other ones (which are not needed for wrapping)
+  come after a short comment further below.
+  
+  Wrappers for all functions starting with /LAPACKE_/ should be created.
+  Functions with suffix /_work/ are ignored.
+
+  By changing /nameAndClass/, /lapackeIgnoreSuffixes/, /lapackFilter/ in /main/,
+  and /lapackArgs/ accordingly, one can probably also wrap (C)BLAS functions
+  using this generator.
+
+  --* Note on XBLAS functions
+  There are functions in LAPACKE which apparently rely on XBLAS to be present.
+  If you do not have that, the variable /lapackeIgnoreSuffixes/ already holds
+  a list of suffices of functions to ignore.
+  If you have XBLAS and want to use these functions, fell free to change that list.
+
+  Call this program with the lapacke.h header as argument, and you should get a 
+  LAPACKE_.chs file that you need to paste into LAPACKE.chs in BLAS/Foreign.
+-}
+
 module Main where
 
-import Debug.Trace
-
--- import qualified Data.ByteString as BS
-import Text.Parsec.Language
-import Text.Parsec.Char
-import Text.Parsec.Error
-import Text.Parsec
-import "mtl" Control.Monad.Identity
-import qualified Control.Applicative as App
-import Data.List
+import Language.C
+import Language.C.Data.Ident
+import Language.C.Analysis
+import Language.C.System.GCC
+import System
+import Data.Map (toList, Map, fromListWith, fromList, empty, unions)
+import qualified Data.Map as Map (lookup)
 import Data.Maybe
-import System.Environment
-import qualified "mtl" Control.Monad.State as State
+import Data.List
+import Control.Monad (when, zipWithM)
 
-type Ret = Arg
+import Control.Monad.Trans.Writer
+
+main = do
+  [fn] <- getArgs
+  translUnit <- parseMyFile fn
+  let Right (decls, _) = runTrav_ $ analyseAST translUnit
+  let funcDecls = filter declFilter $ map snd $ toList (gObjs decls)
+      lapackFilter = \a -> ("LAPACKE_" `isPrefixOf` (cfName a)) && not("_work" `isSuffixOf` (cfName a)) && not (ignore $ cfName a)
+      funcs = filter lapackFilter $ catMaybes $ map fun funcDecls
+
+      -- These are the C function wrappers for C2HS.
+      (cWrapper, cWrapperl) = runM $ mapM createC2hsFun funcs 
+      
+  -- This file is to be added to the LAPACKE.chs file in BLAS/Foreign.
+  writeFile "LAPACKE_.chs" $ unlines $ catMaybes cWrapper
+  mapM_ putStrLn cWrapperl
+
+
+
+parseMyFile :: FilePath -> IO CTranslUnit
+parseMyFile input_file = do
+  parse_result <- parseCFile (newGCC "gcc") Nothing ["-DLAPACK_COMPLEX_STRUCTURE","-DHAVE_LAPACK_CONFIG_H"] input_file
+  case parse_result of
+    Left e -> error (show e)
+    Right ast -> return ast
+
+printAst :: CTranslUnit -> IO ()
+printAst = print . pretty
+
+
+declFilter :: IdentDecl -> Bool
+declFilter (Declaration _) = True
+declFilter _ = False
+
+data CFunction = CFunction { cfName :: String, 
+                             cfType :: FunType }
+
+-- | Get function name and type from an IdentDecl.
+fun :: IdentDecl -> Maybe CFunction
+fun (Declaration (Decl (VarDecl (VarName (Ident str _ _) _) _ typ) _ )) = funType typ >>= \ft -> Just (CFunction str ft)
+fun _ = Nothing
+
+-- | Get the FunType from a Type
+funType :: Type -> Maybe FunType
+funType (FunctionType ft _) = Just ft
+funType _ = Nothing
+
+funTypeStr :: FunType -> (String, [String])
+funTypeStr (FunType ret params _) = (show (pretty ret), map (show . pretty) params)
+funTypeStr _ = ([],[])
+
+
+type M = Writer [String]
+
+logger :: String -> M ()
+logger s = tell [s]
+
+runM :: M a -> (a, [String])
+runM = runWriter
+
+-- Ignore functions using XBLAS.
+lapackeIgnoreSuffixes = ["xx", "sx"]
+ignore :: String -> Bool
+ignore s = or $ map (`isSuffixOf` s) lapackeIgnoreSuffixes
+
+{-| Creates a line for a c2hs input file, wrapping the given 'CFunction'. -}
+createC2hsFun :: CFunction -> M (Maybe String)
+createC2hsFun cf = do
+  margs' <- funArgs cf
+  let fname  = cfName cf
+      -- hsname = fname -- cfHsName cf                       
+      margs_fixed = mnac >>= \(_,_,_,cc) -> margs' >>= return . fixArgs cc
+      margs  = margs_fixed >>= \args -> return $ map (\a -> inMarsh a ++ " `" ++ hsArg a ++ "'") (init args)
+      mret   = margs_fixed >>= return . last >>= \ret -> Just ("`" ++ hsArg ret ++ "' " ++ retMarsh ret)
+      mnac   = nameAndClass cf
+  return $ do
+    args <- margs
+    ret <- mret 
+    (CName name, HsName hsname, ShortName short_name, classCode) <- mnac
+    Just $ "{# fun unsafe " ++ fname ++ " as " ++ hsname ++ " {" ++ intercalate ", " args ++ "}" ++ " -> "++ ret ++ " #}"
+  
+  
+-- | Marks the class of BLAS/LAPACK functions a function belongs to.
+data BClassCode = BSingle | BDouble | BComplex | BZomplex | Extra deriving (Show, Eq, Ord)
+
+
+-- | Return the 'Arg' list of arguments for the given function, or Nothing if that's impossible.
+funArgs :: CFunction -> M (Maybe [Arg])
+funArgs cf = do  
+  let FunType ret params _ = cfType cf
+  margs' <- sequence $ map paramArg params
+  let margs = sequence margs'
+  case margs of
+    Just _ -> return ()
+    Nothing -> logger ("Function " ++ cfName cf ++ " has margs = Nothing!")
+  mretarg <- typeArg "" ret
+  return $ margs >>= \args -> mretarg >>= \retarg -> return (args ++ [retarg])
+
+
+-- | Replace pointers in complex type functions.
+fixArgs :: BClassCode -> [Arg] -> [Arg]
+fixArgs BComplex args = replaceBy 
+                             (\a -> hsArg a == "Ptr ()") 
+                             (\a -> a {hsArg = "Ptr (Complex CFloat)", inMarsh = "castPtr"}) args
+fixArgs BZomplex args = replaceBy 
+                             (\a -> hsArg a == "Ptr ()") 
+                             (\a -> a {hsArg = "Ptr (Complex CDouble)", inMarsh = "castPtr"}) args
+fixArgs _ args = args
+
+{- | Helper function; replaces occurrences of elements in a list for which a predicate function
+     is true. The other elements are simply copied. -}
+replaceBy :: (a -> Bool) -> (a -> a) -> [a] -> [a]
+replaceBy t f (a:as) = if t a then f a : replaceBy t f as else a : replaceBy t f as
+replaceBy _ _ [] = []
+
 
 data Arg = A { 
   argName :: String,
   cArg :: String,
-  hsArg :: String,               
+  hsArg :: String,
   inMarsh :: String,
-  outMarsh :: String, 
+  outMarsh :: String,
   retMarsh :: String} deriving (Eq, Show)
 
-allArgs = [
-  A "uplo" "char" "CChar" "fromEnum" "" "fromEnum",
-  A "" "char" "CChar" "fromEnum" "" "fromEnum",
+{-| Defines the mappings from C argument types to Haskell types, as well as marshalling functions
+    that will be used with c2hs. -}
+lapackArgs = [
+  A "uplo" "char" "CChar" "castChar" "" "castChar",
+  A "" "char" "CChar" "castChar" "" "castChar",
+  A "" "char*" "Char" "withSingleChar*" "withSingleCharPtr*" "withSingleChar*",
   A "" "int" "Int" "fromIntegral" "" "fromIntegral",
   A "" "lapack_int" "Int" "fromIntegral" "" "fromIntegral",
   A "" "lapack_logical" "Int" "fromIntegral" "" "fromIntegral",
@@ -38,8 +178,8 @@ allArgs = [
   A "" "int*" "Ptr CInt" "id" "" "id",
   A "" "float*" "Ptr CFloat" "id" "" "id",
   A "" "double*" "Ptr CDouble" "id" "" "id",
-  A "" "lapack_complex_float*" "Ptr (Complex CFloat)" "castComplexToPtr" "" "castComplexToPtr",
-  A "" "lapack_complex_double*" "Ptr (Complex CDouble)" "castZomplexToPtr" "" "castZomplexToPtr",
+  A "" "_lapack_complex_float*" "Ptr (Complex CFloat)" "castComplexToPtr" "" "castComplexToPtr",
+  A "" "_lapack_complex_double*" "Ptr (Complex CDouble)" "castZomplexToPtr" "" "castZomplexToPtr",
   A "" "void*" "Ptr ()" "id" "" "id",
   A "" "void" "()" "" "id" "id",
   A "" "CBLAS_INDEX" "CblasIndex" "fromIntegral" "" "fromIntegral",
@@ -49,458 +189,247 @@ allArgs = [
   A "" "CBLAS_DIAG" "CblasDiag" "cFromEnum" "" "cToEnum",
   A "" "CBLAS_SIDE" "CblasSide" "cFromEnum" "" "cToEnum"]
 
-                         
-data PState = PState {pstateFunctions :: [CFunction] }
-
-type P = ParsecT String PState Identity
-
-data CFunction = CFunction { cfRet :: Ret,            -- Return value
-                             cfCName :: String,       -- Original name of the c function
-                             cfHsName :: String,      -- Name of the imported Haskell function
-                             cfCommonName :: String, -- Name in class, without prefix s,d,c,z.
-                             cfArgs :: [Arg],         -- Arguments 
-                             cfType :: TypeCode
-                           } deriving (Eq, Show)
 
 
-data TypeCode = BSingle | BDouble | BComplex | BZomplex | Extra deriving (Show, Eq)
-
-{- | Helper function; replaces occurrences of elements in a list for which a predicate function
-     is true. The other elements are simply copied. -}
-replaceBy :: (a -> Bool) -> (a -> a) -> [a] -> [a]
-replaceBy t f (a:as) = if t a then f a : replaceBy t f as else a : replaceBy t f as
-replaceBy _ _ [] = []
+-- From here on downwards, there are some functions I experimented with (for creating the classes).
+-- Do not bother. All needed for wrapping LAPACKE should be above.
+--------------------------------------------------------------------------------------------------------
 
 
-toCFunction :: String -> String -> [(String,String)] -> Maybe CFunction
-toCFunction ret fname args = 
-  let hsname' | "_work" `isSuffixOf` fname = []  -- drop all _work functions
-              | "LAPACKE_" `isPrefixOf` fname = drop 8 fname 
-              | "LAPACK_" `isPrefixOf` fname = [] -- drop all LAPACK functions; only export LAPACKE.
-              | otherwise = fname
-      -- Handle some exceptions...
-      headElem | hsname' == [] = '\0'
-               | otherwise = head hsname'
-      (hsname, typeCode) | hsname' == "scnrm2" = ("nrm2", BComplex)
-                         | hsname' == "dznrm2" = ("nrm2", BZomplex)                 
-                         | hsname' == "scasum" = ("asum", BComplex)
-                         | hsname' == "dzasum" = ("asum", BZomplex)
-                         | hsname' == "dsdot" =  ("dot", BSingle)
-                         | hsname' == "sdsdot" = ("sdsdot", Extra)
-                         | hsname' == "sdot"   = ("sdot", Extra)
-                         | hsname' == "cscal" = ("scal", BComplex)
-                         | hsname' == "zscal" = ("scal", BZomplex)                                                             
-                         | hsname' == "csscal" = ("scal'", BComplex)
-                         | hsname' == "zdscal" = ("scal'", BZomplex)                                                
-                         | hsname' == "sgesvd" = ("gesvd", BSingle)
-                         | hsname' == "dgesvd" = ("gesvd", BDouble)
-                         | hsname' == "cgesvd" = ("gesvd", BComplex)
-                         | hsname' == "zgesvd" = ("gesvd", BZomplex)
-                         | headElem == 's' = (drop 1 hsname', BSingle)
-                         | headElem == 'd' = (drop 1 hsname', BDouble)                                             
-                         | headElem == 'c' = (drop 1 hsname', BComplex)                                             
-                         | headElem == 'z' = (drop 1 hsname', BZomplex)                                             
-                         | "is" `isPrefixOf` hsname' = ('i' : drop 2 hsname', BSingle) -- isamax
-                         | "id" `isPrefixOf` hsname' = ('i' : drop 2 hsname', BDouble) -- idamax
-                         | "ic" `isPrefixOf` hsname' = ('i' : drop 2 hsname', BComplex) -- isamax
-                         | "iz" `isPrefixOf` hsname' = ('i' : drop 2 hsname', BZomplex) -- idamax
-                         | otherwise = error $ "Failed to convert c function " ++ fname -- (hsname',Extra)
-      getHsArg (c, name) = let r = find (\a -> (c,"") == (cArg a, argName a) || 
-                                              (c,name) == (cArg a, argName a)) allArgs 
-                   in fromMaybe (error $ "Unknown argument " ++ c) r
 
-      resultArgs :: [Arg]
-      resultArgs | typeCode == BComplex = replaceBy (\a -> hsArg a == "Ptr ()") (\a -> a {hsArg = "Ptr (Complex CFloat)", inMarsh = "castPtr"}) (map getHsArg args)
-                 | typeCode == BZomplex = replaceBy (\a -> hsArg a == "Ptr ()") (\a -> a {hsArg = "Ptr (Complex CDouble)", inMarsh = "castPtr"}) (map getHsArg args)
-                 | otherwise = map getHsArg args
-  in 
-   case hsname' of
-        [] -> Nothing
-        _ -> Just CFunction { cfRet = getHsArg (ret,""),
-                             cfCName = fname,
-                             cfHsName = hsname',
-                             cfCommonName = hsname,
-                             cfArgs = resultArgs, 
-                             cfType = typeCode }
-                            
+-- | The C function name
+data CName = CName { unCName :: String } deriving (Eq, Show, Ord)
 
-{--------------- Header file parsing -------------}
+-- | The Haskell function name
+data HsName = HsName String deriving (Eq, Show, Ord)
 
-{- | Extracts all C function declarations from a C header file. -}
-cHeaderFile :: P PState
-cHeaderFile = do       
-  cSpaces
-  manyTill (try (cPPDefine >> cSpaces >> return ()) <|> 
-            try (cTypedef >> cSpaces >> return ()) <|> 
-            try (cFunDec >> cSpaces >> return ()) <|> 
-            (skipLine >> cSpaces >> return ())) eof
-  getState
+-- | The short Haskell function name, to be used for the type classes.
+data ShortName = ShortName { unShortName :: String } deriving (Eq, Show, Ord)
   
 
-skipLine = anyChar `manyTill` eol >> return ()
+-- | Contains all that is needed to wrap a function.
+data Wrap = Wrap { wrapCName :: CName,
+                   wrapHsName :: HsName,
+                   wrapShortName :: ShortName,
+                   wrapClass :: BClassCode,
+                   wrapArgs :: [Arg],
+                   wrapFun :: CFunction } 
+            
+instance Show Wrap where
+  show = show . unCName . wrapCName
 
-cSpace = try (space >> return ()) 
-         <|> eol
--- cSpaces = skipMany $ choice [try (cComment >> return ()), try cSpace]
-cSpaces = skipMany cSpace
-
-cComment = between (string "/*") (string "*/") $ many anyChar
-
-cPP = do
-  cSpaces
-  char '#'
-  anyChar `manyTill` eol
-
-cPPDefine = do
-  char '#'
-  spaces 
-  string "define"
-  cLineCont
-  
-cLineCont = ((char '\\' >> eol) <|> (anyChar >> return ())) `manyTill` ((satisfy (/= '\\')) >> eol)
-
-cTypedef = do
-  string "typedef"
-  spaces
-  cLineCont
-
-cIgnorables = skipMany $ choice [try (cComment >> return ()), try (cPP >> return ()), cSpace]
-
---eol = do
---  choice [string "\n\r", string "\r\n", string "\n"]
---  return ()
-
-eol = 
-  try (string "\r\n" >> r)
-   <|> try (string "\n\r" >> r)
-   <|> (string "\n" >> r)
-   <|> (string "\r" >> r)
-    where
-      r = return ()
+wrap :: CFunction -> M (Maybe Wrap)
+wrap cf = do
+  margs <- funArgs cf
+  return $ margs >>= \args -> nameAndClass cf >>= \(cn, hn, sn, c) -> 
+    return (Wrap cn hn sn c args cf)
 
 
-cLineComment = do
-  spaces
-  string "//"
-  anyChar `manyTill` eol
+
+-- | Group by short names.
+groupNames :: [Wrap] -> [[Wrap]]
+groupNames ws = map (sortBy (\a b -> compare (wrapClass a) (wrapClass b))) $ (map snd . toList . groupNames') ws
 
 
-{--------------- Creating BLAS type classes -------------------}
-
-data Classes = Classes { clFloatClass :: [(String, CFunction)],
-                         clDoubleClass :: [(String, CFunction)],
-                         clComplexClass :: [(String, CFunction)],
-                         clZomplexClass :: [(String, CFunction)] } deriving Show
-
--- FIXME: reader/state monad, filling the classes. They can also fill instantiations.
-
-type CreateClasses = State.State Classes 
-
-createClassFun :: CFunction -> CreateClasses ()
-createClassFun cf@(CFunction ret cname hsname' hsname args typeCode) = clst
-  where 
-    clst = cls typeCode
-    line = "  " ++ hsname ++ " :: " ++ (intercalate " -> " . map hsArg) args ++ " -> IO (" ++ hsArg ret ++ ")"
-    cls BSingle = State.get >>= (\s -> let ss = clFloatClass s in return $ s { clFloatClass = (line,cf) : ss }) >>= State.put 
-    cls BDouble = State.get >>= (\s -> let ss = clDoubleClass s in return $ s { clDoubleClass = (line,cf) : ss }) >>= State.put
-    cls BComplex = State.get >>= (\s -> let ss = clComplexClass s in return $ s { clComplexClass = (line,cf) : ss })  >>= State.put
-    cls BZomplex = State.get >>= (\s -> let ss = clZomplexClass s in return $ s { clZomplexClass = (line,cf) : ss }) >>= State.put
-    cls Extra = return ()
+groupNames' :: [Wrap] -> Map ShortName [Wrap]
+groupNames' ws = fromListWith f $ zip names (map (\a -> [a]) ws)
+  where names = map wrapShortName ws
+        f [a] as = a : as
 
 
-createClasses :: [CFunction] -> Classes
-createClasses fs = State.execState
-                   (mapM createClassFun fs) (Classes [] [] [] [])
+
+-- | Count how many pairs exist with equal first element.
+count1 :: (Eq a, Ord a) => [(a,b)] -> [Int]
+count1 ab = map length $ groupBy f1 $ sortBy f2 ab
+  where f1 = \(a1,_) (a2,_) -> a1 == a2
+        f2 = \(a1,b1) (a2,b2) -> compare a1 a2
+  --toList $ fromListWith (+) $ zip as $ repeat 1
 
 
-filterCommonFunctions :: Classes -> (Classes, Classes)
-filterCommonFunctions classes@(Classes fc dc cc zc) = (commonClasses, nonCommonClasses)
-  where 
-    (commonClasses, nonCommonClasses) = partition' (`inAll` classes) classes
-    partition' f (Classes fc dc cc zc) = (Classes f1 d1 c1 z1, Classes f2 d2 c2 z2)
-      where
-        [(f1,f2), (d1,d2), (c1,c2), (z1,z2)] = map (partition f) [fc, dc, cc, zc]
-    inOne f = any (\a -> cfCommonName (snd a) == (cfCommonName . snd) f)
-    inAll f (Classes fc dc cc zc) = all (inOne f) [fc, dc, cc, zc]
+-- Like nub, but using Data.Set and taking n*log(n).
+uniquify :: (Eq a, Ord a) => [(a,b)] -> [(a,b)]
+uniquify = nubBy (\a b -> fst a == fst b)
 
 
-data Similarity = Equal | Similar [ArgDiff] | Different deriving (Eq, Show)
-data ArgDiff = ArgDiff (String,String) | ArgEqual deriving (Eq, Show)
-argDiff :: Arg -> Arg -> ArgDiff
-argDiff a1 a2 = result
+data DiffArg = DiffArg { daTypeName :: String, daPos :: Int } deriving (Show, Eq, Ord)
+data PolymorphicArg = NonPolyArg Arg | 
+                      PolyArg { paName :: String, paPos :: Int } deriving (Show)
+-- data ArgPair = ArgPair { 
+
+data Class = Class { clContext :: String,
+                     clName :: String,
+                     clTypeParams :: Map [String] String,
+                     clWraps :: [[Wrap]] } deriving Show
+
+-- lapack4TypeMap :: Map [String] String
+-- lapack4TypeMap = fromList [(["float*","double*","_lapack_complex_float*","_lapack_complex_double*"], "Ptr e")
+--                            ,["float*","double*","_lapack_complex_float*","_lapack_complex_double*"], []
+
+
+printClass :: Class -> String
+printClass c = s ++ sf
+  where s = "class " ++ context ++ clName c ++ " " ++ params ++ " where\n"
+        sf = unwords $ map ((\a -> ' ':' ':a) . printClassFun c) $ clWraps c
+        context | null (clContext c) = ""
+                | otherwise = clContext c ++ " => "
+        params = intercalate " " $ map snd (toList (clTypeParams c))
+
+
+printClassFun :: Class -> [Wrap] -> String
+printClassFun cl ws@(w:_) = name ++ " :: " ++ intercalate " -> " arg_list
+  where ts = argTuples ws
+        name = unShortName $ wrapShortName w
+        arg_list = zipWith argTuple2arg ts hs_args
+        argTuple2arg t hs_t = maybe hs_t id (Map.lookup t (clTypeParams cl))
+        hs_args = map hsArg (wrapArgs w)
+          
+        
+createClass :: [[Wrap]] -> String -> M Class
+createClass wraps cname = do
+  check <- checkUniqueTuples unique_tss 
+  if check 
+    then return cl
+    else logger "There was a non-unique tuple" >> return cl
   where
-    cc@(c1,c2) = (cArg a1, cArg a2)
-    result | c1 == c2 = ArgEqual
-           | otherwise = ArgDiff cc
-
-
-{-| Finds out whether two functions have the same signature up to some differing arguments A.
-The difference between the arguments a \in A must always be the same; i.e. a Float in one function
-always is a Double in the other; there can not be a Float in function 1 and a Bool in function 2, when
-there were other Floats in function 1 which mapped to, say, Double.
-If the functions are similar in this sense, Similar [argdiffs] is returned, where [argdiffs] is the list
-of differences in arguments (for all arguments; the first entry is the return value difference). -}
-compareFunctions :: CFunction -> CFunction -> Similarity
-compareFunctions (CFunction r1 _ _ name1 args1 tp1) (CFunction r2 _ _ name2 args2 tp2) = 
-  if name1 == name2 then diffsAreEqual else Different
-  where
-    argdiffs = zipWith argDiff (r1:args1) (r2:args2)
-    argdiffs' = filter (/= ArgEqual) argdiffs
-    diffsAreEqual :: Similarity
-    diffsAreEqual | argdiffs' == [] = Equal
-                  | otherwise = if diffsAreDistinct then Similar argdiffs else Different
-                    where (a:as) = argdiffs'
-    -- Ueberall gleich muss heissen: Wenn eine Differenz vorkommt, dann darf keiner der beiden Partner in
-    -- einer anderen Differenz vorkommen. Dann muesste es hinhauen.
-    diffsAreDistinct :: Bool
-    diffsAreDistinct = not . null $ nubBy (\(ArgDiff (a,b)) (ArgDiff (a',b')) -> 
-                                          (a == a') && (b /= b') 
-                                          || 
-                                          (a /= a') && (b == b')) $ nub argdiffs'
+    cl = Class { clContext = "(" ++ intercalate "," (map (f . snd) (toList typeParams)) ++ ")"
+              ,  clName = cname  
+              ,  clTypeParams = typeParams
+              ,  clWraps = wraps }
+      where f c = "Field1 " ++ c
+    
+    tss = map argTuples wraps
+    unique_tss = uniqueTuples $ concat tss
+    uts = reverse $ sortBy (\a b -> compare (length (nub a)) (length (nub b))) $ unique_tss
+    -- Mapping C type-string tuples to type parameters
+    typeParams = fromList $ zip uts (map (:[]) ['a'..])
     
 
-{-| Filters similar functions: functions of which the cfCommonName is equal and which have similar parameters
-in the sense of compareFunctions. -}
-filterSimilarFunctions :: [CFunction] -> [[(CFunction,Similarity)]]
-filterSimilarFunctions [] = []
-filterSimilarFunctions fns@(f:fs) = a : filterSimilarFunctions (map fst b)
-  where
-    sims :: CFunction -> [CFunction] -> [(CFunction,Similarity)]
-    sims f fns = zip fns (map (compareFunctions f) fns)
-    filterSimilar (_,s) = case s of
-      Similar _ -> True
-      Equal     -> True
-      _         -> False
-    (a',b) = partition filterSimilar $ sims f fs
-    a = (f,Equal):a'
+argTuples :: [Wrap] -> [[String]]
+argTuples ws = transpose $ map (\a -> map cArg (wrapArgs a)) ws
 
+tuplesCounts :: Eq a => [[a]] -> [Int]
+tuplesCounts a = map length $ map nub a
 
-{-| Get an alist with the replacements from strings in the ArgDiff to type variables for a class definition. -}
-getTypeReplacements :: [(CFunction,Similarity)] -> [(String, String)]
-getTypeReplacements group = concatMap (uncurry replacements) $ zip allDistinctArgDiffs typeVars
-  where
-    replacements (ArgDiff (a,b)) typevar = [(a,[typevar]),(b,[typevar])]
-    replacements _ _ = []
-    typeVars = ['a'..]
-    typeVarCount = length allDistinctArgDiffs
-    allDistinctArgDiffs = nub $ concatMap filterSimilarArgDiffs $ map snd group  
-    filterSimilarArgDiffs :: Similarity -> [ArgDiff]
-    filterSimilarArgDiffs s = case s of
-      Similar a -> a
-      _         -> []
+-- Find the tuples which are unique and have length > 1.
+-- I.e. throw away the argument tuples which are the same in all classes, and keep
+-- the tuples which are different in some of them.
+uniqueTuples :: [[String]] -> [[String]]
+uniqueTuples ts = gs
+  where gs = filter ((> 1) . length . nub) $ concatMap nub $ group $ sort ts
+        
+
+-- At no point in a list of corresponding C argument type tuples
+-- may there be a type coming up more than once. I.e., the resulting mapping must be reversible.
+checkUniqueTuples :: [[String]] -> M Bool
+checkUniqueTuples t = do
+  let check = l1 == l2
+  when (not check) (logger $ "Non-unique tuples: " ++ show t)
+  return check
+  where l1 = map length tt
+        l2 = map (length . nub) tt
+        tt = transpose t
 
 
 
-allClassesText :: Classes -> String
-allClassesText classes = commonText ++ "\n\n" ++ nonCommonComplex ++ "\n\n" ++ nonCommonReal ++ "\n\n" ++ instances
-  where
-    (common, nonCommon) = filterCommonFunctions classes
-    commonText' = classText "class (Field e he) => LapackeOps e he" (map snd (clFloatClass common))
-    replaceText :: String -> String -> String -> String
-    replaceText s r text = let p' = runP (
-                                 do 
-                                   -- This is slow (++), but I can't figure out "shows" right now.
-                                   many (try (string s >> modifyState (++ r)) <|> 
-                                         (anyChar >>= \a -> modifyState (\s -> s ++ [a])))
-                                   getState ) "" "" text
-                               p = case p' of
-                                 Left pe -> concatMap messageString $ errorMessages pe
-                                 Right pp -> pp
-                           in p
-    -- FIXME: Hier nicht float ersetzen; alle Funktionen filtern, die den gleichen Namen haben, und
-    -- da die Funktionen filtern, die an der gleichen Stelle die entsprechenden Parameter haben (die Klassenabhaengigen).
-    -- Wenn alle klassenabhaengigen an den gleichen Stellen der Argumentliste sind, passts. Wenn nicht, ist das keine
-    -- gemeinsame Funktion, bzw. eine von einer Untermenge der Klassen.
-    commonText = replaceText "Float" "he" $ replaceText "CFloat" "e" commonText'
-    nonCommonComplex = replaceText "Float" "he" $ replaceText "CFloat" "e" nonCommonComplex'
-    nonCommonComplex' = classText "class (LapackeOps (Complex e) (Complex he)) => LapackeOpsComplex e he"
-                        (map snd (clComplexClass nonCommon))
-    nonCommonReal = replaceText "Float" "he" $ replaceText "CFloat" "e" nonCommonReal'
-    nonCommonReal' = classText "class (LapackeOps e he) => LapackeOpsReal e he"
-                     (map snd (clFloatClass nonCommon))
-    instances = allClassesInstantiations (common, nonCommon)
+differingArgs :: Wrap -> Wrap -> M (Map BClassCode DiffArg)
+differingArgs w1 w2 = do
+  if argPairsAreUnique alist
+    then return $ fromList $ concatMap diffArgs alist
+    else logger ("Functions have incompatible arguments: " ++ unCName (wrapCName w1) ++ ", " ++ unCName (wrapCName w2)) >> 
+         return empty
+  where 
+    -- assoc list of arguments and their positions
+    alist = uniquify $ catMaybes $ zipWith3 f (wrapArgs w1) (wrapArgs w2) [0..] 
 
-
-allClassesInstantiations :: (Classes, Classes) -> String
-allClassesInstantiations (common, nonCommon) = intercalate "\n\n" text
-  where
-    protoFns = map snd $ clFloatClass common
-    protoFnsC = map snd $ clComplexClass nonCommon
-    protoFnsR = map snd $ clFloatClass nonCommon
-    text = [instanceText "instance LapackeOps CFloat Float" (map snd (clFloatClass common)) protoFns,
-            instanceText "instance LapackeOps CDouble Double" (map snd (clDoubleClass common)) protoFns,
-            instanceText "instance LapackeOps (Complex CFloat) (Complex Float)" (map snd (clComplexClass common)) protoFns,
-            instanceText "instance LapackeOps (Complex CDouble) (Complex Double)" (map snd (clZomplexClass common)) protoFns,
-            instanceText "instance LapackeOpsComplex CFloat Float" (map snd (clComplexClass nonCommon)) protoFnsC,
-            instanceText "instance LapackeOpsComplex CDouble Double" (map snd (clZomplexClass nonCommon)) protoFnsC,
-            instanceText "instance LapackeOpsReal CFloat Float" (map snd (clFloatClass nonCommon)) protoFnsR,
-            instanceText "instance LapackeOpsReal CDouble Double" (map snd (clDoubleClass nonCommon)) protoFnsR]
-
-
-classText :: String -> [CFunction] -> String
-classText clsStart clsFns =
-  clsStart ++ " where\n"
-  ++ intercalate "\n" (map fnDec clsFns)
-    where
-      fnDec :: CFunction -> String
-      fnDec f = "  " ++ cfCommonName f ++ " :: " ++ intercalate " -> " args ++ " -> " ++ "IO " ++ ret
-        where 
-          args = map hsArg (cfArgs f)
-          ret = hsArg $ cfRet f
-
-
-
--- TODO: Suche die Argumente, bei denen die Implementierung einen Ptr e erwartet,
---       die Klasse aber ein "he" vorgibt. Da dann eine Konvertierung und ein "with"
---       benutzen. Vergleich cfFloatClass common/nonCommon Argumente mit den gegebenen Argumenten.
-instanceText :: String -> [CFunction] -> [CFunction] -> String
-instanceText clsStart clsFns protoFns =
-  clsStart ++ " where\n" ++ intercalate "\n" (map fnDec $ zip clsFns protoFns)
-    where
-      fnDec :: (CFunction, CFunction) -> String
-      fnDec (f, protoF) = lhs ++ rhs
-        where
-          lhs | anyArgNeedsMarsh || retNeedsMarsh = "  " ++ cfCommonName f ++ " " ++ unwords argNamesf ++ " = "
-              | otherwise = "  " ++ cfCommonName f ++ " = " 
-          rhs | anyArgNeedsMarsh || retNeedsMarsh = concat marshArgs ++ cfHsName f ++ " " ++ unwords newArgs ++ " " ++ retMarsh
-              | otherwise = cfHsName f
-                              
-          (marshArgs, newArgs) = unzip $ map marshArg (zip3 (cfArgs f) (cfArgs protoF) argNamesf)
-                              
-          marshArg :: (Arg, Arg, String) -> (String, String)
-          marshArg (aF, aProto, aName) | argNeedsMarsh (aF, aProto) = 
-            let aName' = aName ++ "'" 
-            in ("with (convComplex " ++ aName ++ ") $ \\" ++ aName' ++ " -> ", aName')
-                              
-          marshArg (_, _, aName) = ("", aName)
-                              
-          -- cfHsName f aufrufen mit den parametern in argNames (cfArgs f) 0; 
-          -- die, fuer die argNeedsMarsh wahr ist, muessen mit "with" an 
-          -- die Implementierung uebergeben werden.
-
-          argNames :: [a] -> Int -> [String]
-          argNames [] _ = [] 
-          argNames (_:as) n = ('a' : show n) : argNames as (n+1)
-          argNamesf = argNames (cfArgs f) 0
-          isPtr a = "Ptr" `isPrefixOf` hsArg a
-          argNeedsMarsh (aF,aProto) | isPtr aF && isPtr aProto = False
-                                    | not (isPtr aF) && not (isPtr aProto) = False
-                                    | isPtr aF && not (isPtr aProto) = True
-                                    | otherwise = error $ "instanceText: This case is not handled and should not occur in BLAS! Function: " ++ cfCName f ++ " proto Haskell name: " ++ cfHsName protoF
-          --anyArgNeedsMarsh = any (==True) $ map argNeedsMarsh $ zip (cfArgs f) (cfArgs protoF)
-          anyArgNeedsMarsh = False
-          
-          (retNeedsMarsh, retMarsh) | cfHsName f == "scnrm2" = retRealToComplex
-                                    | cfHsName f == "dznrm2" = retRealToComplex
-                                    | cfHsName f == "scasum" = retRealToComplex
-                                    | cfHsName f == "dzasum" = retRealToComplex
-                                    | otherwise = (False, "")
-          retRealToComplex = (True, " >>= \\a -> return (a :+ 0)")
-          
-                                      
-
-
-createC2hsFun :: CFunction -> String
-createC2hsFun cf = let fname = cfCName cf
-                       hsname = cfHsName cf
-                       args = map (\a -> inMarsh a ++ " `" ++ hsArg a ++ "'") $ cfArgs cf
-                       ret = "`" ++ hsArg (cfRet cf) ++ "' " ++ retMarsh (cfRet cf)
-                   in
-                    "{# fun unsafe " ++ fname ++ " as " ++ hsname ++ " {" ++ intercalate ", " args ++ "}" ++ " -> "++ ret ++ " #}"
-                    
-{-| These function names will be ignored. -}
-ignoreList :: [String]
-ignoreList = ["lapack_make_complex_float", "lapack_make_complex_double", "LAPACKE_zcgesv", "LAPACKE_dsgesv", "LAPACKE_zcposv", "LAPACKE_dsposv", "LAPACKE_zcgesv_work", "LAPACKE_dsgesv_work", "LAPACKE_zcposv_work", "LAPACKE_dsposv_work"]
-
-cFunDec :: P ()
-cFunDec = do
-  r <- cRetVal <?> "cRetVal"
-  cSpaces
-  fn <- cFunName <?> "cFunName"
-  cSpaces
-  args <- char '(' >> sepBy (cSpaces >> cArgument App.<* cSpaces) (char ',') >>= \r -> cSpaces >> char ')' >> return r
-  --when ("svd" `isSuffixOf` fn) $
-  cSpaces
-  char ';'
-  when (fn `notElem` ignoreList) $
-    modifyState (\(PState fs) -> let mf = toCFunction r fn args 
-                                in PState $ maybe fs (: fs) mf)
-  trace ("Found function " ++ fn ++ " with args " ++ unwords (map (\(a,b) -> a ++ " " ++ b) args)) $ return ()
-
-  -- return $ r ++ fn ++ (concat args)
-
-cRetVal = cTypeIdent
-
-cFunName = cIdentifier
-
-cArgument :: P (String, String)
-cArgument = do
-  i <- cTypeIdent
-  cSpaces
-  n <- cVarName
-  return (i,n)
-
-cTypeIdent :: P String
-cTypeIdent = do
-  c <- option "" (string "const")
-  cSpaces
-  e <- option "" (string "enum")
-  cSpaces
-  i <- cIdentifier
-  cSpaces
-  star <- option "" $ string "*"
-  return $ i ++ star
-  
-cIdentifier :: P String
-cIdentifier = do
-  l1 <- optionMaybe (try letter <|> char '_')
-  l2 <- many $ try alphaNum <|> char '_'
-  return $ case l1 of
-                Nothing -> l2
-                Just l -> l : l2
-  
-cVarName = cIdentifier
-
-cToC2HS :: String -> PState
-cToC2HS s = let e = runP cHeaderFile (PState []) "" s
-            in 
-             case e of
-               Left pe -> let s = map messageString (errorMessages pe) in PState []
-               Right rs -> rs
-                
-writeClasses :: Classes -> IO ()
-writeClasses cls = do
-  writeFile "zomplex.hs" $ intercalate "\n" (get clZomplexClass)
-  writeFile "complex.hs" $ intercalate "\n" (get clComplexClass) 
-  writeFile "float.hs"   $ intercalate "\n" (get clFloatClass) 
-  writeFile "double.hs"  $ intercalate "\n" (get clDoubleClass) 
-    where      
-      get f = map fst (f cls)
+    diffArgs ((ca1,ca2),i) = [(wrapClass w1, DiffArg ca1 i), (wrapClass w2, DiffArg ca2 i)]
     
+    f a1 a2 i = if ca1 /= ca2 
+                then Just ((ca1,ca2), i) -- cName 1, cName 2, and position in the argument list.
+                else Nothing
+      where { ca1 = cArg a1; ca2 = cArg a2 }
 
-writeClasses' :: Classes -> IO ()
-writeClasses' classes = writeFile "lapacke_classes.hs" s
-  where
-    s = allClassesText classes
+
+--groupArguments :: [[Wrap]] -> [[Wrap]]
+--groupArguments ws
+-- | Finds out whether differing argument pairs are occurring only once.
+argPairsAreUnique :: [((String,String),Int)] -> Bool
+argPairsAreUnique alist = isNothing $ find (/= 1) $ concat $ occurrenceCounts alist
+
+occurrenceCounts :: [((String,String),Int)] -> [[Int]]
+occurrenceCounts alist = [(count1 $ map fst alist),(count1 $ map (swap . fst) alist)]
+swap (a,b) = (b,a)
 
 
-printGroups :: [[(CFunction,Similarity)]] -> IO ()
-printGroups = mapM_ printGroup 
 
-printGroup :: [(CFunction,Similarity)] -> IO ()
-printGroup g = putStrLn "Group" >> mapM_ (putStrLn . cfCName . fst) g
+nameAndClass :: CFunction -> Maybe (CName, HsName, ShortName, BClassCode)
+nameAndClass (CFunction n ft) | "_work" `isSuffixOf` n = Nothing
+                              | "LAPACKE_" `isPrefixOf` n = Just (CName n, HsName n', ShortName n'', typeCode)
+                              | otherwise = Nothing
+  where n' | "_work" `isSuffixOf` n = []
+           | "LAPACKE_" `isPrefixOf` n = drop 8 n
+           | "LAPACK_" `isPrefixOf` n = []
+           | otherwise = n
 
-main = do
-  args <- getArgs
-  when (length args < 1) $ error "Usage: parselapacke <lapacke header file>"
-  let fname = head args
-  f <- readFile fname
-  let functions = pstateFunctions $ cToC2HS f
-      --classes = createClasses functions
-  --writeClasses' classes
-  --putStrLn $ show $ filterSimilarFunctions functions
-  --mapM_ print $ map (\f -> (cfCName f, cfCommonName f)) functions
-  --printGroups $ filterSimilarFunctions functions
-  writeFile "lapacke.chs" $ (concat . reverse . intersperse "\n") (map createC2hsFun functions)
+       -- Handle some exceptions...
+        headElem | null n' = '\0'
+                 | otherwise = head n'
+        (n'', typeCode) | n' == "scnrm2" = ("nrm2", BComplex)
+                        | n' == "dznrm2" = ("nrm2", BZomplex)                 
+                        | n' == "scasum" = ("asum", BComplex)
+                        | n' == "dzasum" = ("asum", BZomplex)
+                        | n' == "dsdot"  =  ("dot", BSingle)
+                        | n' == "sdsdot" = ("sdsdot", Extra)
+                        | n' == "sdot"   = ("sdot", Extra)
+                        | n' == "cscal"  = ("scal", BComplex)
+                        | n' == "zscal"  = ("scal", BZomplex)                                                             
+                        | n' == "csscal" = ("scal'", BComplex)
+                        | n' == "zdscal" = ("scal'", BZomplex)                                                
+                        | n' == "sgesvd" = ("gesvd", BSingle)
+                        | n' == "dgesvd" = ("gesvd", BDouble)
+                        | n' == "cgesvd" = ("gesvd", BComplex)
+                        | n' == "zgesvd" = ("gesvd", BZomplex)
+                        | headElem == 's' = (tail n', BSingle)
+                        | headElem == 'd' = (tail n', BDouble)                                             
+                        | headElem == 'c' = (tail n', BComplex)                                             
+                        | headElem == 'z' = (tail n', BZomplex)                                             
+                        | "is" `isPrefixOf` n' = ('i' : drop 2 n', BSingle) -- isamax
+                        | "id" `isPrefixOf` n' = ('i' : drop 2 n', BDouble) -- idamax
+                        | "ic" `isPrefixOf` n' = ('i' : drop 2 n', BComplex) -- isamax
+                        | "iz" `isPrefixOf` n' = ('i' : drop 2 n', BZomplex) -- idamax
+                        | otherwise = (n', Extra) -- error $ "Failed to convert c function " ++ n -- (hsname',Extra)
+      
 
+paramName :: ParamDecl -> M String
+paramName (ParamDecl (VarDecl (VarName (Ident arg_name _ _) _) _ _) _) = return arg_name
+paramName _ = return ""
+
+paramType :: ParamDecl -> M Type
+paramType (ParamDecl (VarDecl _ _ t) _) = return t
+
+typeString :: Type -> M String
+typeString (DirectType tn _ _) = typeNameString tn
+typeString (PtrType t _ _) = typeString t >>= \s -> s `seq` return (s ++ "*")
+typeString (TypeDefType (TypeDefRef (Ident n _ _) mtype _) _ _) = return n
+typeString _ = logger ("typeString: unsupported type") >> return [] -- error "typeString: unsupported type: " ++ (show . pretty) t
+
+typeNameString :: TypeName -> M String
+typeNameString TyVoid = return "void"
+typeNameString (TyIntegral n) = return $ show n
+typeNameString (TyFloating n) = return $ show n
+typeNameString (TyComplex n)  = return $ show n
+typeNameString (TyComp (CompTypeRef n _ _))  = return $ show n
+typeNameString (TyEnum (EnumTypeRef n _))   = return $ show n
+typeNameString (TyBuiltin _)   = logger ("typeNameString: TyBuiltin found. Not so good.") >> return [] -- error "TyBuiltin found."
+
+typeArg :: String -> Type -> M (Maybe Arg)
+typeArg n t = do
+              ts <- typeString t
+              maybe (logger ("typeArg: " ++ ts ++ " could not be matched.") >> return Nothing) (return . Just) (m ts)
+  where m ts = find (\a -> (ts,"") == (cArg a, argName a) || (ts,n) == (cArg a, argName a)) lapackArgs
+
+paramArg :: ParamDecl -> M (Maybe Arg)
+paramArg p = do
+  t <- paramType p
+  n <- paramName p
+  typeArg n t
 
