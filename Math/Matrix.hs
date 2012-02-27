@@ -53,10 +53,18 @@ module Math.Matrix
         invert,
         idMatrix,
         pseudoInverse,
-        matrixAssocs,
+        -- ** SVD
+        svd,
+        SVD(..),
+        SVDOpt(..),
+        SVDU(..),
+        SVDVT(..),
+        -- ** Map over 'CMatrix'
         matrixMap,
         matrixBinMap,
-
+        -- ** Getting the elements
+        matrixAssocs,
+        
         -- * General functions
         checkIndex,
         inMatrixRange,
@@ -73,12 +81,14 @@ module Math.Matrix
         matrixElem,
         matrixMult,
 
-        -- * Unsafe manipulations
+        -- * Unsafe manipulations. Do not use these unless you know what you are doing.
+        --   These may change without notice.
         unsafeMatrixSetElem,
         unsafeMatrixMult,
         unsafeMatrixFill,
         unsafeMatrixCopy,
         unsafeSolveLinearSystem,
+        unsafeSVD,
         unsafeMatrixMap,
         unsafeMatrixBinMap,
 
@@ -430,12 +440,92 @@ invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> 
          | otherwise = Nothing --error "Cannot invert non-square matrix."
 
 
-{-| P^T (P P^T)^(-1)  --  works only for fat matrices (?) -}
+{-| P^T (P P^T)^(-1)  --  works only for fat matrices (?) -- FIXME not done yet. -}
 pseudoInverse :: (BlasOps e, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) => mat e -> Maybe (mat e)
 pseudoInverse mat = fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
 
--- FIXME!
--- svd :: (BlasOps e, LapackeOps e, CMatrix mat e) => mat e -> 
+{-| SVD option for the /U/ output. -}
+data SVDU = SVDU SVDOpt deriving (Ord, Eq)
+{-| SVD option for the /VT/ output. -}
+data SVDVT = SVDVT SVDOpt deriving (Ord, Eq)
+{-| SVD options for the output. -}
+data SVDOpt = SVDFull -- ^ Selects the output to be fully computed. For /U/, that means /m x m/, for /VT/ it means /n x n/.
+            | SVDThin -- ^ Selects Thin SVD. /U/: (m, min (m,n)), /VT/: (n, min (m,n))
+            | SVDNone -- ^ Deselects the output.
+            deriving (Ord, Eq)
+  
+svdJob :: SVDOpt -> CChar
+svdJob SVDFull = toEnum $ fromEnum 'A'
+svdJob SVDThin = toEnum $ fromEnum 'S'
+svdJob SVDNone = toEnum $ fromEnum 'N'
+                                        
+svdJobs :: (SVDU, SVDVT) -> (CChar,CChar)
+svdJobs (SVDU u,SVDVT vt) = (svdJob u, svdJob vt)
+
+{-| Description of the result of a singular value decomposition with 'svd'. -}
+data (CMatrix mat e, CVector vec se) => SVD mat e vec se  = SVD { 
+  -- | The left, unitary matrix U. Nothing if the /SVDU SVDNone/ was selected.
+  svdU :: Maybe (mat e)
+  -- | The right singular vectors, VT (transposed, so the vectors are in the rows). Nothing if /SVDVT SVDNone/ was selected.
+  , svdVT :: Maybe (mat e)
+  -- | The singular values, /s/.  
+  , svdS :: vec se }
+                                                            
+-- s must have increment 1!!
+--   gesvd :: Int -> CChar -> CChar -> Int -> Int -> Ptr e -> Int -> Ptr se -> Ptr e -> Int -> Ptr e -> Int -> Ptr se -> IO (Int)
+{-| Uses the LAPACKE function /gesvd/ internally to compute the singular value decomposition. 
+    The arguments are used as storage, so this is really unsafe. Only used internally. -}
+unsafeSVD :: (BlasOps e, LapackeOps e se, CVector vec se, CMatrix mat e) => 
+             mat e -> (SVDU, SVDVT) -> vec se -> mat e -> mat e -> IO ()
+unsafeSVD a opts s u vt = do
+  when (inc s /= 1) $ error $ "unsafeSVD: s must have increment 1, but has " ++ show (inc s)
+  withCMatrix a $ \ap ->
+    withCVector s $ \sp ->
+    withCMatrix u $ \up ->
+    withCMatrix vt $ \vtp ->
+    mallocForeignPtrArray superb_size >>= \superb' -> withForeignPtr superb' $ \superbp ->
+    gesvd mOrder jobu jobvt m n ap (lda a) sp up (lda u) vtp (lda vt) superbp >>
+    return ()
+  where (jobu, jobvt) = svdJobs opts
+        mOrder = toLapacke $ order a
+        (m,n) = shape a
+        superb_size = (min m n) - 1 -- This is taken from the LAPACKE source code.
+
+{-| Compute the singular value decomposition /U * S * V^T = A/ of a matrix /A/.
+    U and V are (m,m) and (n,n) unitary matrices, and S is a (m,n) matrix with
+    nonzero elements only on the main diagonal. These are the /singular values/.
+    
+    The extent to which /U/ and /V^T/
+    are computed can be chosen by 'SVDU' and 'SVDVT' arguments.
+    SVDU or SVDVT 'SVDFull' return the full (m,m) or (n,n) matrices.
+    For 'SVDU' 'SVDThin', only the first min(m,n) columns of /U/ are computed.
+    For 'SVDVT' 'SVDThin', only the first min(m,n) rows of /V^T/ are computed.
+    For 'SVDNone', the respective matrix will not be returned.
+
+    Note that /V^T/ is indeed returned in its transposed form. -}
+svd :: (BlasOps e, LapackeOps e se, CMatrix mat e, CVector vec se) =>
+       mat e               -- ^ The matrix /A/
+       -> (SVDU, SVDVT)     -- ^ Choice of extent to which to compute /U/ and /V^T/.
+       -> SVD mat e vec se  -- ^ Returns the SVD.
+svd a opts@(SVDU optu, SVDVT optvt) =
+  unsafePerformIO $ do
+    matrixCopy a >>= \acopy ->
+      matrixAlloc (shapeU optu) >>= \u ->
+      matrixAlloc (shapeVT optvt) >>= \vt ->
+      vectorAlloc len_s >>= \s -> do
+        unsafeSVD acopy opts s u vt
+        return $ SVD { svdU = if optu /= SVDNone then Just u else Nothing
+                     , svdVT = if optvt /= SVDNone then Just vt else Nothing
+                     , svdS = s }
+  where
+    (m,n) = shape a
+    len_s = min m n
+    shapeU SVDFull = (m,m)
+    shapeU SVDThin = (m, min m n)
+    shapeU _ = (0,0)
+    shapeVT SVDFull = (n,n)
+    shapeVT SVDThin = (min m n, n)
+    shapeVT _ = (0,0)
 
 unsafeInvert :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> IO (Maybe (mat e))
 unsafeInvert mat = withCMatrix mat $ \mp ->

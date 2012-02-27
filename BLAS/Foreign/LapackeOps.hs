@@ -30,7 +30,10 @@ instance LAPACKEEnum UpLo CChar where
   fromLapacke c | c == (toEnum . fromEnum) 'u' = Up
                 | c == (toEnum . fromEnum) 'l' = Lo
 
--- (ZU TUN) erledigt: e/he durch e ersetzen; reine skalare durch se ersetzen
+
+-- These classes were originally automatically with a program in the parseblas directory.
+-- However, functions have been added by hand.
+-- Add more when you need them.
 class (Field1 e, Field1 se) => LapackeOps e se | e -> se where
   gbequ :: Int -> Int -> Int -> Int -> Int -> Ptr e -> Int -> Ptr se -> Ptr se -> Ptr se -> Ptr se -> Ptr se -> IO Int
   gbequb :: Int -> Int -> Int -> Int -> Int -> Ptr e -> Int -> Ptr se -> Ptr se -> Ptr se -> Ptr se -> Ptr se -> IO Int
@@ -70,6 +73,8 @@ class (Field1 e, Field1 se) => LapackeOps e se | e -> se where
   --tgexc :: Int -> Int -> Int -> Int -> Ptr e -> Int -> Ptr e -> Int -> Ptr e -> Int -> Ptr e -> Int -> Ptr CInt -> Ptr CInt -> IO Int
   --tgsen :: Int -> Int -> Int -> Int -> Ptr CInt -> Int -> Ptr e -> Int -> Ptr e -> Int -> Ptr e -> Ptr e -> Ptr e -> Ptr e -> Int -> Ptr e -> Int -> Ptr CInt -> Ptr e -> Ptr e -> Ptr e -> IO Int
   tzrzf :: Int -> Int -> Int -> Ptr e -> Int -> Ptr e -> IO Int
+  gesvd :: Int -> CChar -> CChar -> Int -> Int -> Ptr e -> Int -> Ptr se -> Ptr e -> Int -> Ptr e -> Int -> Ptr se -> IO (Int)
+
 
 class (LapackeOps (Complex e) e) => LapackeOpsComplex e where
   unghr :: Int -> Int -> Int -> Int -> Ptr (Complex e) -> Int -> Ptr (Complex e) -> IO Int
@@ -125,7 +130,8 @@ instance LapackeOps CFloat CFloat where
   --tgexc = stgexc
   --tgsen = stgsen
   tzrzf = stzrzf
-
+  gesvd = sgesvd
+  
 instance LapackeOps CDouble CDouble where
   gbequ = dgbequ
   gbequb = dgbequb
@@ -163,6 +169,7 @@ instance LapackeOps CDouble CDouble where
   --tgexc = dtgexc
   --tgsen = dtgsen
   tzrzf = dtzrzf
+  gesvd = dgesvd
 
 instance LapackeOps (Complex CFloat) CFloat where
   gbequ = cgbequ
@@ -201,6 +208,7 @@ instance LapackeOps (Complex CFloat) CFloat where
   --tgexc = ctgexc
   --tgsen = ctgsen
   tzrzf = ctzrzf
+  gesvd = cgesvd
 
 instance LapackeOps (Complex CDouble) CDouble where
   gbequ = zgbequ
@@ -239,6 +247,7 @@ instance LapackeOps (Complex CDouble) CDouble where
   --tgexc = ztgexc
   --tgsen = ztgsen
   tzrzf = ztzrzf
+  gesvd = zgesvd
 
 instance LapackeOpsComplex CFloat where
   unghr = cunghr

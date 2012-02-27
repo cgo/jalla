@@ -17,7 +17,7 @@ description: Jalla aims at providing high level functions for linear algebra com
   should be fast and easy enough to use. Under the hood, BLAS and LAPACKE are used 
   (LAPACKE is a standard C interface to LAPACK which is part of LAPACK since version 3.4).
   Currently, I am adding new functions whenever I find some time. Please help, if you want to!
-  Tests are still missing.
+  Tests are still missing, and we need some nicer error reporting (nicer than exceptions).
 category: Math
 author: Christian Gosch
 tested-with: GHC (>= 7.0.3)

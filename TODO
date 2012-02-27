@@ -3,7 +3,9 @@
 parsenew.hs is creating the c2hs code in LAPACKE.chs now.
 Check that the char* -> String conversion is right! I do not know
 whether the LAPACKE char* arguments are null-terminated or not.
-
+As far as the lapack documentation goes, they seem to be 1 character.
+I am assuming that in the code, taking that these arguments point to one 
+character.
 
 
 Zu tun

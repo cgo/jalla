@@ -28,7 +28,7 @@ type CblasIndex = Integer
 c2i :: (Integral i1, Integral i2) => i1 -> i2
 c2i = fromIntegral
 c2f :: (RealFloat a1, RealFloat a2) => a1 -> a2
-c2f = cFloatConv
+c2f = realToFrac
 
 -- These were all generated with parseblas.hs. Do not change them here, rather change parseblas.hs. 
 {# fun unsafe cblas_sdsdot as sdsdot {fromIntegral `Int', id `CFloat', id `Ptr CFloat', fromIntegral `Int', id `Ptr CFloat', fromIntegral `Int'} -> `CFloat' id #}
