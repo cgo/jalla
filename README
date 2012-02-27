@@ -12,10 +12,17 @@ synaptic, or any other such tool.
 Lapacke must be compiled "by hand".
 
 0. Get the jalla sources; say they are located in the directory "jalla/"
-1. Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
-   or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
+1. a) LAPACKE is part of LAPACK since version 3.4.
+      If you have that version, use that. Otherwise, follow b).
+   b) Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
+      or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
 2. Unpack lapacke into "jalla/lapacke"
-3. Follow lapacke's instructions to build
+3. Follow lapacke's instructions to build.
+   Note that Jalla expects the LAPACKE_... naming scheme, i.e. LAPACKE in upper case,
+   the rest in lower case. That scheme is called LAPACK_NAME_PATTERN_MC in the LAPACKE make.inc
+   file.
+   Jalla also expects the define LAPACK_COMPLEX_STRUCTURE in the same make.inc.
+   This means that complex numbers are represented as C struct.   
 4. In jalla/, call 
     cabal configure
     cabal build
