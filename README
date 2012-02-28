@@ -1,4 +1,6 @@
-Jalla is a Haskell wrapper for cblas and lapacke, a C interface for LAPACK written by Intel.
+Jalla aims at providing high level functions for linear algebra computations,
+which should be fast and easy enough to use.
+It also contains a Haskell wrapper for cblas and lapacke, a C interface for LAPACK written by Intel.
 Jalla is written and maintained by Christian Gosch (github at goschs dot de) and
 was started as a little project to learn Haskell.
 
