@@ -16,29 +16,33 @@
 -----------------------------------------------------------------------------
 
 module Math.Vector (
-    -- * Vector classes
+    -- * Classes
+    -- ** Vectors
     GVector(..),
     CVector(..),
-    -- * Vector/vector operations
+    -- ** Vector/vector operations
     VectorVector(..),
-    -- * Vector instance
+    -- ** Vector/scalar operations
+    VectorScalar(..),
+    -- ** Indexable
+    module Math.Indexable,
+    -- * Data Types
     Vector(..),
     
-    -- * Functions from indexable
-    module Math.Indexable,
-    -- * Monadic, efficient vector modification
+    -- * Construction, conversion, modification
+    -- ** Monadic, efficient vector modification
     VMM,
-    -- ** Functions from IMM can be used
-    module Math.IMM,
-    -- ** Additional functions for CVector types
-    listVector,
-    vectorList,
+    getVector,
     createVector,
     modifyVector,
-    getVector,
+    module Math.IMM,
+    -- ** Vector maps
     vectorAdd,
     vectorMap,
     vectorBinMap,
+    -- * Conversion From And To Lists
+    listVector,
+    vectorList,
     -- * Inner product
     module Math.InnerProduct,
     
@@ -76,7 +80,7 @@ class (Indexable (vec e) Index e, Field1 e) => GVector vec e where
   --(-|) :: vec e -> vec e -> e
   -- (!) :: vec e -> Index -> e
 
-class (BlasOps e, GVector vec e) => CVector vec e where
+class (BlasOps e, GVector vec e, Show (vec e)) => CVector vec e where
   vectorAlloc :: Index -> IO (vec e)
   withCVector :: vec e -> (Ptr e -> IO a) -> IO a
   inc :: vec e -> Index
@@ -89,6 +93,16 @@ class (CVector vec e) => VectorVector vec e where
   -- | Vector subtraction
   (||-) :: vec e -> vec e -> vec e
 
+{-| Vector manipulations by a scalar. -}
+class (CVector vec e) => VectorScalar vec e where
+  (|.*) :: vec e -> e -> vec e
+  a |.* b = vectorMap (*b) a
+  (|./) :: vec e -> e -> vec e
+  a |./ b = vectorMap (/b) a
+  (|.+) :: vec e -> e -> vec e
+  a |.+ b = vectorMap (+b) a
+  (|.-) :: vec e -> e -> vec e
+  a |.- b = vectorMap ((-)b) a
 
 {-| Vector is the 'CVector' type that is used in Jalla. 
 Somehow Haddock does not want to create documentation for the class instances 
@@ -123,6 +137,7 @@ instance BlasOps e => VectorVector Vector e where
   v1 ||+ v2 = modifyVector v1 $ vectorAdd 1 v2
   v1 ||- v2 = modifyVector v1 $ vectorAdd (-1) v2
 
+instance BlasOps e => VectorScalar Vector e
 
 vectorList :: GVector vec e => vec e -> [e]
 vectorList v = map (v !) [0..n-1] where n = vectorLength v
@@ -139,14 +154,15 @@ instance (BlasOps e, Eq e) => Eq (Vector e) where
 
 
 instance (BlasOps e, Show e) => Show (Vector e) where
-  show v = "vectorList " ++ show (vectorList v)
+  show v = "listVector " ++ show (vectorList v)
 
 
 {-| /Num/ instance for a /Vector/. 
 The operations are all /element-wise/. There may be the occasional error
 by wrongly assuming that /(*)/ returns the inner product, which it doesn't.
-This instance is basically only provided to get the + and - operators,
-and to be able to use /sum/ and the like. -}
+This instance is basically only provided to get the + and - operators.
+Note that this will /not/ work with 'sum', since 
+that assumes it can start with a "0". -}
 instance (BlasOps e, Num e) => Num (Vector e) where
   a + b         = modifyVector a $ vectorAdd 1 b
   a - b         = modifyVector a $ vectorAdd (-1) b
@@ -154,9 +170,42 @@ instance (BlasOps e, Num e) => Num (Vector e) where
   negate        = vectorMap (* (-1))
   abs           = vectorMap abs
   signum        = vectorMap signum
-  fromInteger i = createVector 1 $ setElem 1 (fromIntegral i)
+  fromInteger i = createVector 1 $ setElem 0 (fromIntegral i)
   
+
+instance (BlasOps e, Num e, Fractional e) => Fractional (Vector e) where
+  a / b = vectorBinMap (/) a b
+  recip = vectorMap recip
+  fromRational r = createVector 1 $ setElem 0 (fromRational r)
   
+{-| An instance of 'Vector' for 'Floating', for convenience.
+    Some of these don't make much sense in some situations,
+    but having the trigonometric functions and the like around can be pretty handy. 
+    The functions work element-wise. -}
+instance (BlasOps e, Num e, Fractional e) => Floating (Vector e) where
+  -- | Returns a 1-vector with /pi/ in it.
+  pi = createVector 1 $ setElem 0 pi
+  exp = vectorMap exp
+  sqrt = vectorMap sqrt
+  log = vectorMap log
+  -- | Takes the element-wise power.
+  a ** b = vectorBinMap (**) a b
+  -- | Computes 'logBase' the /element-wise/. It may be more useful to simply use /vectorMap (logBase b) v/.
+  logBase = vectorBinMap logBase
+  sin = vectorMap sin
+  tan = vectorMap tan
+  cos = vectorMap cos
+  asin = vectorMap asin
+  atan = vectorMap atan
+  acos = vectorMap acos
+  sinh = vectorMap sinh
+  tanh = vectorMap tanh
+  cosh = vectorMap cosh
+  asinh = vectorMap asinh
+  atanh = vectorMap atanh
+  acosh = vectorMap acosh
+  
+
 instance (BlasOps e, BlasOpsReal e, CVector vec e) => InnerProduct (vec e) e where
     innerProduct = innerProductReal
 
@@ -234,8 +283,8 @@ innerProductC v1 v2 | n == n2 = unsafePerformIO $
     with (0 :+ 0) $ \pret ->
     dotu_sub n p1 (inc v1) p2 (inc v2) pret >> peek pret
         where
-            n = vectorLength v1
-            n2 = vectorLength v2
+          n = vectorLength v1
+          n2 = vectorLength v2
 innerProductC _ _ | otherwise = error "innerProduct: vectors must have same length."
 
 
@@ -253,7 +302,7 @@ unsafeVectorAdd alpha v1 v2 | n == n2 =
         where
             n = vectorLength v1
             n2 = vectorLength v2
-unsafeVectorAdd _ _ _ | otherwise = error "unsafeVectorAdd: Vector lengths must match"
+unsafeVectorAdd _ v1 v2 | otherwise = error $ "unsafeVectorAdd: Vector lengths must match, when adding " ++ show v1 ++ "\nand\n" ++ show v2 
 
 
 unsafeSetElem :: (BlasOps e, CVector vec e) => vec e -> Index -> e -> IO ()
