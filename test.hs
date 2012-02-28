@@ -25,6 +25,9 @@ main =
         m5 :: Matrix CDouble
         m5 = matrixBinMap (\a b -> realToFrac (a + b)) m4 m4
         m5svd = svd m5 (SVDU SVDFull, SVDVT SVDFull) :: SVD Matrix CDouble Vector CDouble
+        v1 :: Vector CFloat
+        v1 = listVector [1,2,3]
+        v2 = v1 |.* 2 
     in
      do
       prettyPrintMatrixIO m
@@ -51,3 +54,5 @@ main =
           vt = fromJust $ svdVT m5svd
       print "U * S * VT = "
       prettyPrintMatrixIO $ u ## s ## vt
+      print v1
+      print v2
