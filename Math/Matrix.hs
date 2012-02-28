@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances,
-             GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts, UndecidableInstances, RankNTypes, ExistentialQuantification #-}
+             GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts, RankNTypes, ExistentialQuantification #-}
 
 -----------------------------------------------------------------------------
 --
@@ -19,26 +19,26 @@
 module Math.Matrix
        (
          -- * Classes
+         -- ** Matrices
          GMatrix(..),
          CMatrix(..),
-         -- ** Matrix/matrix operations
+         -- ** Matrix/Matrix Operations
          MatrixMatrix(..),
-         -- ** Matrix/vector operations
+         -- ** Matrix/Vector Operations
          MatrixVector(..),
-
+         -- ** Matrix/Scalar Operations
+         MatrixScalar(..),
+         Floating,
+        -- ** Indexable
+         module Math.Indexable,
          -- * Data types
+         Matrix,
          Order(..),
          Transpose(..),
-         Matrix,
 
-        -- * Functions from indexable
-        module Math.Indexable,
-
-         -- * Matrix manipulation monad and functions
+        -- * Construction, Conversion, Manipulation
+        -- ** Manipulation Monad and Functions
         MMM,
-         -- ** Functions from IMM can be used
-        module Math.IMM,
-        -- ** Additional MMM functions for CMatrix
         createMatrix,
         modifyMatrix,
         getMatrix,
@@ -47,42 +47,50 @@ module Math.Matrix
         setColumn,
         setBlock,
         fillBlock,
+        -- ** Maps over 'CMatrix'
+        matrixMap,
+        matrixBinMap,
+        -- ** Conversions To And From Lists
+        matrixList,
+        matrixLists,
+        listMatrix,
+        matrixAssocs,
+        gmatrixAssocs,
+         -- ** Functions From IMM Can Be Used
+        module Math.IMM,
 
-        -- * CMatrix functions
+        -- * Printing Matrices
+        prettyPrintMatrix,
+        prettyPrintMatrixIO,
+        
+        -- * CMatrix Linear Algebra Functions
+        -- ** Solving Linear Systems
         solveLinearSystem,
+        -- ** Inversion
         invert,
-        idMatrix,
         pseudoInverse,
+        -- ** Special Matrices
+        idMatrix,
         -- ** SVD
         svd,
         SVD(..),
         SVDOpt(..),
         SVDU(..),
         SVDVT(..),
-        -- ** Map over 'CMatrix'
-        matrixMap,
-        matrixBinMap,
-        -- ** Getting the elements
-        matrixAssocs,
         
-        -- * General functions
+        -- * Generating and Checking Indices
         checkIndex,
         inMatrixRange,
-        matrixList,
-        matrixLists,
-        listMatrix,
-        prettyPrintMatrix,
-        prettyPrintMatrixIO,
         diagIndices,
-        gmatrixAssocs,
 
-        -- * Low level IO matrix functions
+        -- * Low Level IO Matrix Functions
         matrixAlloc',
         matrixElem,
         matrixMult,
 
-        -- * Unsafe manipulations. Do not use these unless you know what you are doing.
-        --   These may change without notice.
+        -- * Unsafe manipulations. 
+        -- Do not use these unless you know what you are doing.
+        -- These may change without notice.
         unsafeMatrixSetElem,
         unsafeMatrixMult,
         unsafeMatrixFill,
@@ -161,16 +169,38 @@ class (Field1 e, Indexable (mat e) IndexPair e) => GMatrix mat e where
 
   -- (!) :: mat e -> IndexPair -> e
 
-class (Field1 e, GMatrix mat e) => MatrixMatrix mat e where
+class (Field1 e, BlasOps e, GMatrix mat e, CMatrix mat e) => MatrixMatrix mat e where
   (##) :: mat e -> mat e -> mat e
   (##!) :: (Transpose, mat e) -> (Transpose, mat e) -> mat e
   (##+) :: mat e -> mat e -> mat e
   (##-) :: mat e -> mat e -> mat e
+  m1 ## m2 | colCount m1 /= rowCount m2 = error "(##): shape mismatch!"
+           | otherwise = unsafePerformIO $ matrixMult 1 NoTrans m1 NoTrans m2
+  (t1,m1) ##! (t2,m2) | colCountTrans t1 s1 /= rowCountTrans t2 s2 = error "(##): shape mismatch!"
+                      | otherwise = unsafePerformIO $ matrixMult 1 t1 m1 t2 m2
+                          where s1 = shape m1
+                                s2 = shape m2
+  m1 ##+ m2 = matrixBinMap (\a b -> a + b) m1 m2
+  m1 ##- m2 = matrixBinMap (\a b -> a - b) m1 m2
 
 
-class MatrixVector mat vec e where
+class (CMatrix mat e, CVector vec e) => MatrixVector mat vec e where
   (#|) :: mat e -> vec e -> vec e
   (|#) :: vec e -> mat e -> vec e
+
+
+{-| Matrix manipulations by a scalar. 
+    The nomenclature is to be read /Matrix - Scalar - [operation name]/,
+    where /#/ stands for matrix, /./ stands for scalar. -}
+class (Storable e, CMatrix mat e) => MatrixScalar mat e where
+  (#.*) :: mat e -> e -> mat e
+  a #.* b = matrixMap (*b) a
+  (#./) :: mat e -> e -> mat e
+  a #./ b = matrixMap (/b) a
+  (#.+) :: mat e -> e -> mat e
+  a #.+ b = matrixMap (+b) a
+  (#.-) :: mat e -> e -> mat e
+  a #.- b = matrixMap ((-)b) a
 
 
 {-| Interface for matrices with underlying contiguous C array storage.
@@ -287,6 +317,9 @@ shapeTrans t s | t == Trans = T.swap s
 -- data (Storable a) => BlasComplex a = BlasComplex { bcReal :: a, bcImag :: a }
 
 
+{-| This is the instance of 'CMatrix' that Jalla provides.
+    If you don't have another 'CMatrix' instance, 'Matrix'
+    is the one you will want to use. -}
 data BlasOps e => Matrix e = Matrix { matP :: !(ForeignPtr e),
                                      matShape :: !Shape,
                                      matLDA :: !Index,
@@ -300,15 +333,7 @@ instance (Num e, Field1 e, BlasOps e) => GMatrix Matrix e where
 
 -- BIG WARNING!
 -- FIXME: This needs UndecidableInstances, which is not very good! How can I do this better?
-instance (BlasOps e, GMatrix mat e, CMatrix mat e) => MatrixMatrix mat e where
-  m1 ## m2 | colCount m1 /= rowCount m2 = error "(##): shape mismatch!"
-           | otherwise = unsafePerformIO $ matrixMult 1 NoTrans m1 NoTrans m2
-  (t1,m1) ##! (t2,m2) | colCountTrans t1 s1 /= rowCountTrans t2 s2 = error "(##): shape mismatch!"
-                      | otherwise = unsafePerformIO $ matrixMult 1 t1 m1 t2 m2
-                          where s1 = shape m1
-                                s2 = shape m2
-  m1 ##+ m2 = matrixBinMap (\a b -> a + b) m1 m2
-  m1 ##- m2 = matrixBinMap (\a b -> a - b) m1 m2
+instance BlasOps e => MatrixMatrix Matrix e 
 
 
 instance BlasOps e => Indexable (Matrix e) IndexPair e where
@@ -325,6 +350,68 @@ instance (Num e, Field1 e, BlasOps e) => CMatrix Matrix e where
 
 withMatrix' :: (BlasOps e) => Matrix e -> (Ptr e -> IO a) -> IO a
 withMatrix' m = withForeignPtr (matP m)
+
+
+instance (BlasOps e, Show e) => Show (Matrix e) where
+  show mat = "listMatrix (" ++ show m ++ "," ++ show n ++ ") " ++ show ml
+    where (m,n) = shape mat
+          ml = matrixList mat
+
+
+instance (BlasOps e, Eq e) => Eq (Matrix e) where
+  a == b = if (shape a == shape b) 
+           then (and $ zipWith (==) (matrixList a) (matrixList b))
+           else False
+
+
+{-| /Num/ instance for a /Matrix/. 
+The operations are all /element-wise/. There may be the occasional error
+by wrongly assuming that /(*)/ returns the matrix product, which it doesn't.
+This instance is basically only provided to get the + and - operators.
+Note that this will /not/ work with 'sum', since 
+that assumes it can start with a "0". -}
+instance (BlasOps e, Num e) => Num (Matrix e) where
+  a + b         = a ##+ b
+  a - b         = a ##- b
+  a * b         = matrixBinMap (*) a b
+  negate        = matrixMap (* (-1))
+  abs           = matrixMap abs
+  signum        = matrixMap signum
+  fromInteger i = createMatrix (1,1) $ setElem (0,0) (fromIntegral i)
+  
+
+instance (BlasOps e, Num e, Fractional e) => Fractional (Matrix e) where
+  a / b = matrixBinMap (/) a b
+  recip = matrixMap recip
+  fromRational r = createMatrix (1,1) $ setElem (0,0) (fromRational r)
+  
+{-| An instance of 'Matrix' for 'Floating', for convenience.
+    Some of these don't make much sense in some situations,
+    but having the trigonometric functions and the like around can be pretty handy. 
+    The functions work element-wise. -}
+instance (BlasOps e, Num e, Fractional e) => Floating (Matrix e) where
+  -- | Returns a 1-vector with /pi/ in it.
+  pi = createMatrix (1,1) $ setElem (0,0) pi
+  exp = matrixMap exp
+  sqrt = matrixMap sqrt
+  log = matrixMap log
+  -- | Takes the /element-wise/ power.
+  a ** b = matrixBinMap (**) a b
+  -- | Computes 'logBase' the /element-wise/. It may be more useful to simply use /matrixMap (logBase b) v/.
+  logBase = matrixBinMap logBase
+  sin = matrixMap sin
+  tan = matrixMap tan
+  cos = matrixMap cos
+  asin = matrixMap asin
+  atan = matrixMap atan
+  acos = matrixMap acos
+  sinh = matrixMap sinh
+  tanh = matrixMap tanh
+  cosh = matrixMap cosh
+  asinh = matrixMap asinh
+  atanh = matrixMap atanh
+  acosh = matrixMap acosh
+
 
 
 {-| Get association list of indices and elements for the given GMatrix. -}
@@ -393,9 +480,6 @@ unsafeMatrixMult alpha transA a transB b beta c =
       transB' = toBlas transB
 
 
--- unsafeMatrixAdd :: (BlasOps e, CMatrix mat e) =>
-
-
 
 {-| Solve a system AX = B with LAPACKs xgesv procedure. Replaces A with a LU decomposition and B with the solution. -}
 unsafeSolveLinearSystem :: (BlasOps e, LapackeOps e se, CMatrix mat e) =>
@@ -413,6 +497,7 @@ unsafeSolveLinearSystem a b | rowCount a == colCount a && rowCount a == rowCount
       nrhs = colCount b
 unsafeSolveLinearSystem a b | otherwise = error "unsafeSolveLinearSystem: The shapes of the arguments do not match."
 
+
 {-| Solves a system AX = B with LAPACKs xgesv procedure. Returns
     a matrix with the solutions in its columns. -}
 solveLinearSystem :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> mat e -> mat e
@@ -422,8 +507,10 @@ solveLinearSystem a b = unsafePerformIO $
                         matrixCopy a >>= \a' ->
                         unsafeSolveLinearSystem a' x >> return x
 
+
 idMatrix :: (BlasOps e, CMatrix mat e) => Index -> mat e
 idMatrix n = createMatrix (n,n) $ fill 0 >> setDiag 0 (repeat 1)
+
 
 {-| Invert. FIXME: Implement with getrf and getri, that is probably more
 efficient than first creating a dense identity matrix. -}
@@ -444,6 +531,7 @@ invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> 
 pseudoInverse :: (BlasOps e, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) => mat e -> Maybe (mat e)
 pseudoInverse mat = fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
 
+
 {-| SVD option for the /U/ output. -}
 data SVDU = SVDU SVDOpt deriving (Ord, Eq)
 {-| SVD option for the /VT/ output. -}
@@ -454,13 +542,16 @@ data SVDOpt = SVDFull -- ^ Selects the output to be fully computed. For /U/, tha
             | SVDNone -- ^ Deselects the output.
             deriving (Ord, Eq)
   
+
 svdJob :: SVDOpt -> CChar
 svdJob SVDFull = toEnum $ fromEnum 'A'
 svdJob SVDThin = toEnum $ fromEnum 'S'
 svdJob SVDNone = toEnum $ fromEnum 'N'
                                         
+
 svdJobs :: (SVDU, SVDVT) -> (CChar,CChar)
 svdJobs (SVDU u,SVDVT vt) = (svdJob u, svdJob vt)
+
 
 {-| Description of the result of a singular value decomposition with 'svd'. -}
 data (CMatrix mat e, CVector vec se) => SVD mat e vec se  = SVD { 
@@ -471,8 +562,8 @@ data (CMatrix mat e, CVector vec se) => SVD mat e vec se  = SVD {
   -- | The singular values, /s/.  
   , svdS :: vec se }
                                                             
--- s must have increment 1!!
---   gesvd :: Int -> CChar -> CChar -> Int -> Int -> Ptr e -> Int -> Ptr se -> Ptr e -> Int -> Ptr e -> Int -> Ptr se -> IO (Int)
+
+-- s /must/ have increment 1!!
 {-| Uses the LAPACKE function /gesvd/ internally to compute the singular value decomposition. 
     The arguments are used as storage, so this is really unsafe. Only used internally. -}
 unsafeSVD :: (BlasOps e, LapackeOps e se, CVector vec se, CMatrix mat e) => 
@@ -526,6 +617,7 @@ svd a opts@(SVDU optu, SVDVT optvt) =
     shapeVT SVDFull = (n,n)
     shapeVT SVDThin = (min m n, n)
     shapeVT _ = (0,0)
+
 
 unsafeInvert :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> IO (Maybe (mat e))
 unsafeInvert mat = withCMatrix mat $ \mp ->
@@ -635,8 +727,6 @@ matrixMap' f mat = matrixAlloc s >>= \mRet ->
     n = r * c
 
 
---matrixRow :: (Field e he) => Matrix e he -> Index -> IO (Matrix e he)
---matrixRow mat i = matrixAlloc
 
 {-| Create a list of elements, in row-major order, from the given matrix. -}
 matrixList :: (GMatrix mat e) => mat e -> [e]
@@ -749,6 +839,7 @@ setDiag d as = MMM $ get >>= \m ->
 setElems' :: (BlasOps e, CMatrix mat e) => [(IndexPair,e)] -> MMM s mat e ()
 setElems' els = MMM $ get >>= \m -> liftIO $ unsafeMatrixSetElems m els -- mapM_ (uncurry setElem)
 
+
 {-| Set a row in the current matrix to a list of elements. -}
 setRow :: (BlasOps e, CMatrix mat e) =>
          Index -- ^ Number of the row to set
@@ -763,6 +854,7 @@ setColumn :: (BlasOps e, CMatrix mat e) =>
             -> [e]  -- ^ List of elements to set
             -> MMM s mat e ()
 setColumn i as = fmap shape getMatrix >>= \(r,_) -> setElems $ zip (range ((0,i),(r-1,i))) as -- (zip (zip [0..(r-1)] [i,i..]) as)
+
 
 {-| Set the block starting at a given index to the given CMatrix. -}
 setBlock :: (BlasOps e, CMatrix mat e) =>
@@ -780,6 +872,7 @@ setBlock (i,j) mat = getMatrix >>= \m -> setElems (a m)
                 s = let (r,c) = shape m in (r-1,c-1)
         (r,c) = let (a,b) = shape mat in (a-1,b-1)
 
+
 {-| Fill a range with a given element. -}
 fillBlock :: (BlasOps e, CMatrix mat e) =>
     IndexPair    -- ^ Start of the range.
@@ -787,26 +880,12 @@ fillBlock :: (BlasOps e, CMatrix mat e) =>
     -> e          -- ^ Element to fill the range with.
     -> MMM s mat e ()
 fillBlock start end = setElems . zip (range (start,end)) . repeat
-{- fillBlock start end e = getMatrix >>= \m -> setElems (a m)
-    where
-        a m = as m
-        is' = range (start,end)
-        as m = zip valids $ repeat e
-            where
-                valids = filter (\ij -> inRange ((0,0),s) ij) is'
-                s = let (r,c) = shape m in (r-1,c-1)
--}
-
 
 
 {-| Get an element of the matrix currently under modification. -}
 getElem' :: (BlasOps e, CMatrix mat e) => IndexPair -> MMM s mat e e
 getElem' ij = MMM $ get >>= \m -> liftIO $ matrixElem m ij
 
-
-
--- freezeMatrix :: (Integral i, Fractional a, MatrixClass i a mat) => mat -> MatrixST s mat
--- setElem :: (Integral i, Fractional a, MatrixClass i a mat) => mat -> (i,i) -> a -> MatrixST s ()
 
 
 
