@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, TypeFamilies #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Math.Types
@@ -67,10 +67,21 @@ instance (RealFloat a, Storable a) => Storable (Complex a) where
           i = imagPart c
 
 
-class (Num e, Floating e) => Field1 e
-instance Field1 CFloat
-instance Field1 CDouble
-instance Field1 (Complex CFloat)
-instance Field1 (Complex CDouble)
+{-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
+    and 'CFloat', as well as 'Complex' 'CDouble' and 'CDouble'. -}
+class (Num e, Floating e) => Field1 e where
+  type FieldScalar e :: *
+  
+instance Field1 CFloat where
+  type FieldScalar CFloat = CFloat
+  
+instance Field1 CDouble where
+  type FieldScalar CDouble = CDouble
+  
+instance Field1 (Complex CFloat) where
+  type FieldScalar (Complex CFloat) = CFloat
+
+instance Field1 (Complex CDouble) where
+  type FieldScalar (Complex CDouble) = CDouble
 
 

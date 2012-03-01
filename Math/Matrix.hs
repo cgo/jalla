@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances,
-             GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts, RankNTypes, ExistentialQuantification #-}
+GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleContexts, RankNTypes, 
+ExistentialQuantification, ScopedTypeVariables, TypeFamilies #-}
 
 -----------------------------------------------------------------------------
 --
@@ -123,6 +124,7 @@ import Foreign
 import Ix
 import Data.Complex
 import Data.List (partition)
+import Data.Maybe (fromJust)
 import Math.Types
 import Control.Monad.State
 import qualified Data.Tuple as T (swap)
@@ -206,11 +208,30 @@ class (Storable e, CMatrix mat e) => MatrixScalar mat e where
 {-| Interface for matrices with underlying contiguous C array storage.
     These matrices can be used with BLAS and LAPACK functions. -}
 class (GMatrix mat e) => CMatrix mat e where
+  type CMatrixVector mat e :: *     -- ^ This is an associated vector type that /can/ be used with /mat e/.
+  type CMatrixVectorS mat e :: *    -- ^ The same, but a vector type with a type that is the associated scalar of e.
   matrixAlloc :: Shape -> IO (mat e)
   withCMatrix :: mat e -> (Ptr e -> IO a) -> IO a
   lda         :: mat e -> Index
   order       :: mat e -> Order
 
+
+{-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
+    and 'CFloat', as well as 'Complex' 'CDouble' and 'CDouble'. -}
+-- class (Field1 e) => BlasScalar e where
+--   type BlasScalarT e :: *
+
+-- instance BlasScalar CFloat where
+--   type BlasScalarT CFloat = CFloat
+
+-- instance BlasScalar CDouble where
+--   type BlasScalarT CDouble = CDouble
+
+-- instance BlasScalar (Complex CDouble) where
+--   type BlasScalarT (Complex CDouble) = CDouble
+
+-- instance BlasScalar (Complex CFloat) where
+--   type BlasScalarT (Complex CFloat) = CFloat
 
 
 {-| Map over a CMatrix. 
@@ -341,6 +362,8 @@ instance BlasOps e => Indexable (Matrix e) IndexPair e where
 
 
 instance (Num e, Field1 e, BlasOps e) => CMatrix Matrix e where
+  type CMatrixVector Matrix e = Vector e
+  type CMatrixVectorS Matrix e = Vector (FieldScalar e)
   matrixAlloc = matrixAlloc'
   withCMatrix = withMatrix'
   lda         = matLDA
@@ -528,8 +551,18 @@ invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> 
 
 
 {-| P^T (P P^T)^(-1)  --  works only for fat matrices (?) -- FIXME not done yet. -}
-pseudoInverse :: (BlasOps e, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) => mat e -> Maybe (mat e)
-pseudoInverse mat = fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
+pseudoInverse :: (BlasOps e, se ~ FieldScalar e, Real se, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) 
+                 => mat e -> mat e
+pseudoInverse a = (NoTrans, (Trans, vt) ##! (NoTrans, sm)) ##! (Trans, u)
+  where svd' = (svd a (SVDU SVDThin, SVDVT SVDThin))
+        s = map (\x -> if x /= 0 then 1 / (realToFrac x) else 0) $ vectorList $ svdS svd'
+        -- FIXME: This is slow and uses more memory than needed.
+        -- Add a (matrix times diagonal) function and use that instead.
+        sm = createMatrix (m,n) $ fill 0 >> setDiag 0 s
+        (m,n) = shape a
+        u = fromJust $ svdU svd'
+        vt = fromJust $ svdVT svd'
+  -- fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
 
 
 {-| SVD option for the /U/ output. -}
@@ -554,13 +587,13 @@ svdJobs (SVDU u,SVDVT vt) = (svdJob u, svdJob vt)
 
 
 {-| Description of the result of a singular value decomposition with 'svd'. -}
-data (CMatrix mat e, CVector vec se) => SVD mat e vec se  = SVD { 
+data CMatrix mat e => SVD mat e = SVD { 
   -- | The left, unitary matrix U. Nothing if the /SVDU SVDNone/ was selected.
   svdU :: Maybe (mat e)
   -- | The right singular vectors, VT (transposed, so the vectors are in the rows). Nothing if /SVDVT SVDNone/ was selected.
   , svdVT :: Maybe (mat e)
   -- | The singular values, /s/.  
-  , svdS :: vec se }
+  , svdS :: CMatrixVectorS mat e }
                                                             
 
 -- s /must/ have increment 1!!
@@ -594,10 +627,10 @@ unsafeSVD a opts s u vt = do
     For 'SVDNone', the respective matrix will not be returned.
 
     Note that /V^T/ is indeed returned in its transposed form. -}
-svd :: (BlasOps e, LapackeOps e se, CMatrix mat e, CVector vec se) =>
+svd :: (BlasOps e, LapackeOps e se, CMatrix mat e) =>
        mat e               -- ^ The matrix /A/
        -> (SVDU, SVDVT)     -- ^ Choice of extent to which to compute /U/ and /V^T/.
-       -> SVD mat e vec se  -- ^ Returns the SVD.
+       -> SVD mat e  -- ^ Returns the SVD.
 svd a opts@(SVDU optu, SVDVT optvt) =
   unsafePerformIO $ do
     matrixCopy a >>= \acopy ->
