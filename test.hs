@@ -7,6 +7,7 @@ module Main where
 import "jalla" Math.Matrix
 import "jalla" Math.Vector
 import Data.Maybe
+import System.Random
 
 main = 
     let
@@ -17,17 +18,19 @@ main =
               setDiag 1 (repeat 2)
               setDiag (-1) (repeat (-2))
         m4 :: Matrix CFloat
-        m4 = fromJust $ listMatrix (3,4) $ take (3*4) [1..]
+        m4 = listMatrix (3,4) $ take (3*4) [1..]
         m2 :: Matrix CDouble
         m2 = matrixMap ((+2) . realToFrac ) m
         m3 :: Matrix CFloat
         m3 = matrixBinMap (\a b -> realToFrac a + realToFrac b) m m
         m5 :: Matrix CDouble
         m5 = matrixBinMap (\a b -> realToFrac (a + b)) m4 m4
-        m5svd = svd m5 (SVDU SVDFull, SVDVT SVDFull) :: SVD Matrix CDouble Vector CDouble
+        m5svd = svd m5 (SVDU SVDFull, SVDVT SVDFull)
         v1 :: Vector CFloat
         v1 = listVector [1,2,3]
         v2 = v1 |.* 2 
+        randMatrix :: Int -> Int -> IO (Matrix CDouble)
+        randMatrix m n = getStdGen >>= \g -> return (listMatrix (m,n) (randoms g))
     in
      do
       prettyPrintMatrixIO m
@@ -49,10 +52,27 @@ main =
       prettyPrintMatrixIO (fromJust $ svdU m5svd) 
       print "svd, VT:" 
       prettyPrintMatrixIO (fromJust $ svdVT m5svd) 
-      let s = (createMatrix (shape m5) $ fill 0 >> setDiag 0 (vectorList (svdS m5svd))) :: Matrix CDouble
+      let s = (createMatrix (shape m5) $ fill 0 >> setDiag 0 (svdS m5svd)) :: Matrix CDouble
           u = fromJust $ svdU m5svd
           vt = fromJust $ svdVT m5svd
       print "U * S * VT = "
       prettyPrintMatrixIO $ u ## s ## vt
       print v1
       print v2
+      
+      print "pseudo inverse m5' of m5:"
+      prettyPrintMatrixIO $ pseudoInverse m5
+      print "m5 * m5':"
+      prettyPrintMatrixIO $ m5 ## (pseudoInverse m5)
+      print "m5' * m5:"
+      prettyPrintMatrixIO $ (pseudoInverse m5) ## m5
+      
+      m <- randMatrix 3 4
+      print "Random matrix m:"
+      prettyPrintMatrixIO m
+      print "pseudo inverse m' of m:"
+      prettyPrintMatrixIO $ pseudoInverse m
+      print "m * m':"
+      prettyPrintMatrixIO $ m ## (pseudoInverse m)
+      print "m' * m:"
+      prettyPrintMatrixIO $ (pseudoInverse m) ## m

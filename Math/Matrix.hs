@@ -208,8 +208,10 @@ class (Storable e, CMatrix mat e) => MatrixScalar mat e where
 {-| Interface for matrices with underlying contiguous C array storage.
     These matrices can be used with BLAS and LAPACK functions. -}
 class (GMatrix mat e) => CMatrix mat e where
-  type CMatrixVector mat e :: *     -- ^ This is an associated vector type that /can/ be used with /mat e/.
-  type CMatrixVectorS mat e :: *    -- ^ The same, but a vector type with a type that is the associated scalar of e.
+  -- | This is an associated vector type that /can/ be used with /mat e/.
+  type CMatrixVector mat e :: *     
+  -- | The same, but a vector type with a type that is the associated scalar of e. 
+  type CMatrixVectorS mat e :: *    
   matrixAlloc :: Shape -> IO (mat e)
   withCMatrix :: mat e -> (Ptr e -> IO a) -> IO a
   lda         :: mat e -> Index
@@ -551,17 +553,18 @@ invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> 
 
 
 {-| P^T (P P^T)^(-1)  --  works only for fat matrices (?) -- FIXME not done yet. -}
-pseudoInverse :: (BlasOps e, se ~ FieldScalar e, Real se, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) 
+pseudoInverse :: (BlasOps e, se ~ FieldScalar e, BlasOps se, Real se, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) 
                  => mat e -> mat e
 pseudoInverse a = (NoTrans, (Trans, vt) ##! (NoTrans, sm)) ##! (Trans, u)
-  where svd' = (svd a (SVDU SVDThin, SVDVT SVDThin))
-        s = map (\x -> if x /= 0 then 1 / (realToFrac x) else 0) $ vectorList $ svdS svd'
+  where svd'  = (svd a (SVDU SVDThin, SVDVT SVDThin))
+        s     = map (\x -> if x /= 0 then 1 / (realToFrac x) else 0) $ svdS svd'
         -- FIXME: This is slow and uses more memory than needed.
         -- Add a (matrix times diagonal) function and use that instead.
-        sm = createMatrix (m,n) $ fill 0 >> setDiag 0 s
+        sm    = createMatrix (n',n') $ fill 0 >> setDiag 0 s
+        n'    = min m n
         (m,n) = shape a
-        u = fromJust $ svdU svd'
-        vt = fromJust $ svdVT svd'
+        u     = fromJust $ svdU svd'
+        vt    = fromJust $ svdVT svd'
   -- fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
 
 
@@ -587,13 +590,13 @@ svdJobs (SVDU u,SVDVT vt) = (svdJob u, svdJob vt)
 
 
 {-| Description of the result of a singular value decomposition with 'svd'. -}
-data CMatrix mat e => SVD mat e = SVD { 
+data (CMatrix mat e) => SVD mat e = SVD { 
   -- | The left, unitary matrix U. Nothing if the /SVDU SVDNone/ was selected.
   svdU :: Maybe (mat e)
   -- | The right singular vectors, VT (transposed, so the vectors are in the rows). Nothing if /SVDVT SVDNone/ was selected.
   , svdVT :: Maybe (mat e)
   -- | The singular values, /s/.  
-  , svdS :: CMatrixVectorS mat e }
+  , svdS :: [FieldScalar e] }
                                                             
 
 -- s /must/ have increment 1!!
@@ -627,7 +630,7 @@ unsafeSVD a opts s u vt = do
     For 'SVDNone', the respective matrix will not be returned.
 
     Note that /V^T/ is indeed returned in its transposed form. -}
-svd :: (BlasOps e, LapackeOps e se, CMatrix mat e) =>
+svd :: (BlasOps e, se ~ FieldScalar e, BlasOps se, LapackeOps e se, CMatrix mat e) =>
        mat e               -- ^ The matrix /A/
        -> (SVDU, SVDVT)     -- ^ Choice of extent to which to compute /U/ and /V^T/.
        -> SVD mat e  -- ^ Returns the SVD.
@@ -636,11 +639,11 @@ svd a opts@(SVDU optu, SVDVT optvt) =
     matrixCopy a >>= \acopy ->
       matrixAlloc (shapeU optu) >>= \u ->
       matrixAlloc (shapeVT optvt) >>= \vt ->
-      vectorAlloc len_s >>= \s -> do
+      vectorAlloc len_s >>= \(s :: Vector se) -> do
         unsafeSVD acopy opts s u vt
         return $ SVD { svdU = if optu /= SVDNone then Just u else Nothing
                      , svdVT = if optvt /= SVDNone then Just vt else Nothing
-                     , svdS = s }
+                     , svdS = vectorList s }
   where
     (m,n) = shape a
     len_s = min m n
@@ -778,11 +781,11 @@ matrixLists mat = let (r,c) = shape mat
 listMatrix :: (BlasOps e, CMatrix mat e) =>
            Shape -- ^ Shape of the matrix
            -> [e] -- ^ List of elements, row-major order
-           -> Maybe (mat e) -- ^ If the number of elements in the list matches the number needed for the given shape exactly, returns a Just Matrix; otherwise, returns Nothing.
-listMatrix (r,c) l = if c >= 0 && c >= 0 && (r*c == length l)
-                     then Just $ createMatrix (r,c) $
-                        mapM (uncurry setElem) $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
-                     else Nothing
+           -> mat e -- ^ If the number of elements in the list matches the number needed for the given shape exactly, returns a Just Matrix; otherwise, returns Nothing.
+listMatrix (r,c) l = if c >= 0 && c >= 0
+                     then error "Negative matrix shape??"
+                     else createMatrix (r,c) $
+                            mapM (uncurry setElem) $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
 
 
 prettyPrintMatrix :: (GMatrix mat e) => mat e -> [String]

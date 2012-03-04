@@ -43,10 +43,10 @@ default-extensions:
 other-extensions:
 extensions:
 extra-libraries: lapacke lapack cblas f77blas
-extra-lib-dirs: /home/christian/pgm/lapack-3.4.0/lapacke
+extra-lib-dirs: /home/christian/pgm/jalla/lapacke
 includes:
 install-includes:
-include-dirs: /home/christian/pgm/lapack-3.4.0/lapacke/include
+include-dirs: /home/christian/pgm/jalla/lapacke/include
 hs-source-dirs: .
 other-modules: C2HS Math.Internal
 ghc-prof-options:
