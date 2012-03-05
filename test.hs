@@ -61,7 +61,7 @@ main =
       print v2
       
       print "pseudo inverse m5' of m5:"
-      prettyPrintMatrixIO $ pseudoInverse m5
+      -- prettyPrintMatrixIO $ pseudoInverse m5
       print "m5 * m5':"
       prettyPrintMatrixIO $ m5 ## (pseudoInverse m5)
       print "m5' * m5:"
@@ -76,3 +76,11 @@ main =
       prettyPrintMatrixIO $ m ## (pseudoInverse m)
       print "m' * m:"
       prettyPrintMatrixIO $ (pseudoInverse m) ## m
+      
+      print "Row 0 of m:"
+      print $ (row m 0 :: Vector CDouble)
+      
+      print "Rows of m:"
+      mapM_ (putStrLn . show) $ (rows m :: [Vector CDouble])
+      print "Columns of m:"
+      mapM_ (putStrLn . show) $ (columns m :: [Vector CDouble])
