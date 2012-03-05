@@ -46,6 +46,9 @@ module Math.Vector (
     -- * Inner product
     module Math.InnerProduct,
     
+    -- * IO Functions
+    copyVector,
+    
     -- * Low-level, unsafe functions
 
     -- * Re-exported
@@ -332,7 +335,7 @@ unsafeFillVector v e =
 
 
 {-| Make a copy of the input vector. Using the cblas_*copy functions. -}
-copyVector :: (BlasOps e, CVector vec e) => vec e -> IO (vec e)
+copyVector :: (BlasOps e, CVector vec e, CVector vec2 e) => vec e -> IO (vec2 e)
 copyVector v = vectorAlloc n >>= \ret ->
                withCVector v $ \p ->
                withCVector ret $ \pret ->

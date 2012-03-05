@@ -36,6 +36,7 @@ module Math.Matrix
          Matrix,
          Order(..),
          Transpose(..),
+         RefVector,
 
         -- * Construction, Conversion, Manipulation
         -- ** Manipulation Monad and Functions
@@ -57,6 +58,11 @@ module Math.Matrix
         listMatrix,
         matrixAssocs,
         gmatrixAssocs,
+        -- ** Copying Rows and Columns
+        row,
+        column,
+        rows,
+        columns,
          -- ** Functions From IMM Can Be Used
         module Math.IMM,
 
@@ -91,7 +97,7 @@ module Math.Matrix
 
         -- * Unsafe manipulations. 
         -- Do not use these unless you know what you are doing.
-        -- These may change without notice.
+        -- These may change without notice and may be removed from the visible interface.
         unsafeMatrixSetElem,
         unsafeMatrixMult,
         unsafeMatrixFill,
@@ -101,6 +107,9 @@ module Math.Matrix
         unsafeMatrixMap,
         unsafeMatrixBinMap,
 
+        withCMatrixRow,
+        withCMatrixColumn,
+        
         -- * Re-exported
         CFloat,
         CDouble,
@@ -216,6 +225,7 @@ class (GMatrix mat e) => CMatrix mat e where
   withCMatrix :: mat e -> (Ptr e -> IO a) -> IO a
   lda         :: mat e -> Index
   order       :: mat e -> Order
+
 
 
 {-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
@@ -380,12 +390,12 @@ withMatrix' m = withForeignPtr (matP m)
 instance (BlasOps e, Show e) => Show (Matrix e) where
   show mat = "listMatrix (" ++ show m ++ "," ++ show n ++ ") " ++ show ml
     where (m,n) = shape mat
-          ml = matrixList mat
+          ml = matrixList RowMajor mat
 
 
 instance (BlasOps e, Eq e) => Eq (Matrix e) where
   a == b = if (shape a == shape b) 
-           then (and $ zipWith (==) (matrixList a) (matrixList b))
+           then (and $ zipWith (==) (matrixList RowMajor a) (matrixList RowMajor b))
            else False
 
 
@@ -445,17 +455,21 @@ gmatrixAssocs m = zip is $ map (m !) is
     where
         is = range ((0,0),s)
         s = let (r,c) = shape m in (r-1,c-1)
-{-# RULES "gmatrixAssocs/matrixAssocs" forall (m :: (BlasOps e, CMatrix mat e) => mat e). gmatrixAssocs m = matrixAssocs m #-}
+{-# RULES "gmatrixAssocs/matrixAssocs" forall (m :: (BlasOps e, CMatrix mat e) => mat e). gmatrixAssocs m = matrixAssocs RowMajor m #-}
 
 
 {-| Get association list of indices and elements for the given CMatrix. -}
-matrixAssocs :: (BlasOps e, CMatrix mat e) => mat e -> [(IndexPair, e)]
-matrixAssocs mat = zip r es
+matrixAssocs :: (BlasOps e, CMatrix mat e) => Order -> mat e -> [(IndexPair, e)]
+matrixAssocs o mat = zip r es
     where
-        r = range ((0,0),(r',c'))
-        es = matrixList mat
+        r | o == RowMajor = [(i,j) | i <- [0..r'], j <- [0..c']] 
+          | otherwise    = [(i,j) | j <- [0..c'], i <- [0..r']] 
+        es = matrixList o mat
         (r',c') = let (a,b) = shape mat in (a-1,b-1)
-
+{-# SPECIALIZE INLINE matrixAssocs :: Order -> Matrix CFloat -> [(IndexPair, CFloat)] #-}
+{-# SPECIALIZE INLINE matrixAssocs :: Order -> Matrix CDouble -> [(IndexPair, CDouble)] #-}
+{-# SPECIALIZE INLINE matrixAssocs :: Order -> Matrix (Complex CFloat) -> [(IndexPair, Complex CFloat)] #-}
+{-# SPECIALIZE INLINE matrixAssocs :: Order -> Matrix (Complex CDouble) -> [(IndexPair, Complex CDouble)] #-}
 
 
 {-| Matrix multiplication. Computes alpha * A(^T) * B(^T). -}
@@ -552,7 +566,7 @@ invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> 
          | otherwise = Nothing --error "Cannot invert non-square matrix."
 
 
-{-| P^T (P P^T)^(-1)  --  works only for fat matrices (?) -- FIXME not done yet. -}
+{-| Compute the pseudo-inverse with the help of a SVD. -}
 pseudoInverse :: (BlasOps e, se ~ FieldScalar e, BlasOps se, Real se, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) 
                  => mat e -> mat e
 pseudoInverse a = (NoTrans, (Trans, vt) ##! (NoTrans, sm)) ##! (Trans, u)
@@ -566,6 +580,89 @@ pseudoInverse a = (NoTrans, (Trans, vt) ##! (NoTrans, sm)) ##! (Trans, u)
         u     = fromJust $ svdU svd'
         vt    = fromJust $ svdVT svd'
   -- fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
+
+
+data Storable e => RefVector e = RefVector {
+  refVecP :: !(Ptr e),
+  refVecInc :: !Index,
+  refVecLength :: !Index}
+
+-- refVectorAlloc :: (Storable e, BlasOps e) => Index -> IO (RefVector e)
+-- refVectorAlloc n = mallocForeignPtrArray n >>= \a -> return $ RefVector { refP = a, 
+--                                                                           refVecP = a, 
+--                                                                           refVecInc = 1, 
+--                                                                           refVecLength = n }
+
+instance (Show e, Field1 e, Storable e, BlasOps e) => Show (RefVector e) where
+  show v = "listVector " ++ show (vectorList v)
+
+instance (BlasOps e, Storable e) => CVector RefVector e where
+  vectorAlloc = error "No vectorAlloc for RefVector."
+  withCVector v act = act $ refVecP v
+  inc         = refVecInc
+
+instance (BlasOps e, Storable e) => Indexable (RefVector e) Index e where
+  v ! i  = if i >= 0 && i < refVecLength v 
+           then unsafePerformIO $ withCVector v $ \p -> peek (advancePtr p (i * (refVecInc v)))
+           else error "RefVector range violation."
+                       
+instance (Field1 e, Storable e, BlasOps e) => GVector RefVector e where
+  vector n = unsafePerformIO $ vectorAlloc n
+  vectorLength = refVecLength
+
+
+withCMatrixRow :: Storable e => CMatrix mat e => mat e -> Index -> (RefVector e -> IO a) -> IO a
+withCMatrixRow mat i act = withCMatrix mat $ \mp -> do
+  when (i >= m || i < 0) $ error "withCMatrixRow range violation." 
+  let p = advancePtr mp (i * rinc)
+  act (RefVector { refVecP = p, refVecInc = cinc, refVecLength = n })
+  where
+    (m,n) = shape mat
+    o = order mat
+    (rinc,cinc) | o == RowMajor = (lda mat, 1)
+                | otherwise = (1, lda mat)
+            
+withCMatrixColumn :: Storable e => CMatrix mat e => mat e -> Index -> (RefVector e -> IO a) -> IO a
+withCMatrixColumn mat i act = withCMatrix mat $ \mp -> do
+  when (i >= n || i < 0) $ error "withCMatrixColumn range violation." 
+  let p = advancePtr mp (i * cinc)
+  act (RefVector { refVecP = p, refVecInc = rinc, refVecLength = m })
+  where
+    (m,n) = shape mat
+    o = order mat
+    (rinc,cinc) | o == RowMajor = (lda mat, 1)
+                | otherwise = (1, lda mat)
+            
+
+
+column, row :: (CMatrix mat e, CVector vec e) => mat e -> Index -> vec e
+row m i = unsafePerformIO $ withCMatrixRow m i $ \ref -> copyVector ref -- A copy should be safe.
+column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref 
+{-# SPECIALIZE INLINE row :: Matrix CFloat -> Index -> Vector CFloat #-}  
+{-# SPECIALIZE INLINE row :: Matrix CDouble -> Index -> Vector CDouble #-}  
+{-# SPECIALIZE INLINE row :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
+{-# SPECIALIZE INLINE row :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
+{-# SPECIALIZE INLINE column :: Matrix CFloat -> Index -> Vector CFloat #-}  
+{-# SPECIALIZE INLINE column :: Matrix CDouble -> Index -> Vector CDouble #-}  
+{-# SPECIALIZE INLINE column :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
+{-# SPECIALIZE INLINE column :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
+
+rows, columns :: (CMatrix mat e, CVector vec e) => mat e -> [vec e]
+rows m = map (row m) [0..(rowCount m) - 1]
+columns m = map (column m) [0..(colCount m) - 1]
+{-# SPECIALIZE INLINE rows :: Matrix CFloat -> [Vector CFloat] #-}  
+{-# SPECIALIZE INLINE rows :: Matrix CDouble -> [Vector CDouble] #-}  
+{-# SPECIALIZE INLINE rows :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
+{-# SPECIALIZE INLINE rows :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
+{-# SPECIALIZE INLINE columns :: Matrix CFloat -> [Vector CFloat] #-}  
+{-# SPECIALIZE INLINE columns :: Matrix CDouble -> [Vector CDouble] #-}  
+{-# SPECIALIZE INLINE columns :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
+{-# SPECIALIZE INLINE columns :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
+
+
+-- FIXME: This needs to be implemented next.
+--matrixMultDiag :: CMatrix mat e => mat e -> [e] -> mat e
+--matrixMultDiag a d = matrixAssocs ColumnMajor
 
 
 {-| SVD option for the /U/ output. -}
@@ -603,20 +700,24 @@ data (CMatrix mat e) => SVD mat e = SVD {
 {-| Uses the LAPACKE function /gesvd/ internally to compute the singular value decomposition. 
     The arguments are used as storage, so this is really unsafe. Only used internally. -}
 unsafeSVD :: (BlasOps e, LapackeOps e se, CVector vec se, CMatrix mat e) => 
-             mat e -> (SVDU, SVDVT) -> vec se -> mat e -> mat e -> IO ()
+             mat e            -- ^ The matrix to diagonalise.
+             -> (SVDU, SVDVT)  -- ^ Options for the SVD.
+             -> vec se         -- ^ The CVector for holding the singular values.
+             -> mat e          -- ^ U
+             -> mat e          -- ^ VT
+             -> IO Int         -- ^ The return value of gesvd.
 unsafeSVD a opts s u vt = do
   when (inc s /= 1) $ error $ "unsafeSVD: s must have increment 1, but has " ++ show (inc s)
   withCMatrix a $ \ap ->
     withCVector s $ \sp ->
     withCMatrix u $ \up ->
     withCMatrix vt $ \vtp ->
-    mallocForeignPtrArray superb_size >>= \superb' -> withForeignPtr superb' $ \superbp ->
-    gesvd mOrder jobu jobvt m n ap (lda a) sp up (lda u) vtp (lda vt) superbp >>
-    return ()
+    mallocForeignPtrArray superb_size >>= \superb' -> withForeignPtr superb' $ \superbp -> do
+      gesvd mOrder jobu jobvt m n ap (lda a) sp up (lda u) vtp (lda vt) superbp
   where (jobu, jobvt) = svdJobs opts
         mOrder = toLapacke $ order a
         (m,n) = shape a
-        superb_size = (min m n) - 1 -- This is taken from the LAPACKE source code.
+        superb_size = (min m n) - 1 -- This size is taken from the LAPACKE source code.
 
 {-| Compute the singular value decomposition /U * S * V^T = A/ of a matrix /A/.
     U and V are (m,m) and (n,n) unitary matrices, and S is a (m,n) matrix with
@@ -765,9 +866,15 @@ matrixMap' f mat = matrixAlloc s >>= \mRet ->
 
 
 {-| Create a list of elements, in row-major order, from the given matrix. -}
-matrixList :: (GMatrix mat e) => mat e -> [e]
-matrixList mat = let (r,c) = shape mat
-                 in [mat ! (i,j) | i <- [0..(r-1)], j <- [0..(c-1)]]
+matrixList :: (GMatrix mat e) => Order -> mat e -> [e]
+matrixList o mat | o == RowMajor = [mat ! (i,j) | i <- [0..(r-1)], j <- [0..(c-1)]]
+                 | o == ColumnMajor = [mat ! (i,j) | j <- [0..(c-1)], i <- [0..(r-1)]]
+  where (r,c) = shape mat
+{-# SPECIALIZE INLINE matrixList :: Order -> Matrix CFloat -> [CFloat] #-}
+{-# SPECIALIZE INLINE matrixList :: Order -> Matrix CDouble -> [CDouble] #-}
+{-# SPECIALIZE INLINE matrixList :: Order -> Matrix (Complex CFloat) -> [Complex CFloat] #-}
+{-# SPECIALIZE INLINE matrixList :: Order -> Matrix (Complex CDouble) -> [Complex CDouble] #-}
+
 
 
 {-| Create a list of lists of elements from a matrix, representing the rows of the matrix. -}
@@ -782,7 +889,7 @@ listMatrix :: (BlasOps e, CMatrix mat e) =>
            Shape -- ^ Shape of the matrix
            -> [e] -- ^ List of elements, row-major order
            -> mat e -- ^ If the number of elements in the list matches the number needed for the given shape exactly, returns a Just Matrix; otherwise, returns Nothing.
-listMatrix (r,c) l = if c >= 0 && c >= 0
+listMatrix (r,c) l = if c < 0 || c < 0
                      then error "Negative matrix shape??"
                      else createMatrix (r,c) $
                             mapM (uncurry setElem) $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
@@ -902,7 +1009,7 @@ setBlock (i,j) mat = getMatrix >>= \m -> setElems (a m)
         a m  = as m
         is'' = range ((0,0),(r,c))
         is'  = map (\(a,b) -> (a+i,b+j)) is''
-        es   = matrixList mat
+        es   = matrixList RowMajor mat
         as m = filter (\(ij,_) -> inRange ((0,0),s) ij) (zip is' es)
             where
                 s = let (r,c) = shape m in (r-1,c-1)
