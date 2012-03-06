@@ -69,7 +69,7 @@ instance (RealFloat a, Storable a) => Storable (Complex a) where
 
 {-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
     and 'CFloat', as well as 'Complex' 'CDouble' and 'CDouble'. -}
-class (Num e, Floating e) => Field1 e where
+class (Num e, Floating e, Show e) => Field1 e where
   type FieldScalar e :: *
   
 instance Field1 CFloat where

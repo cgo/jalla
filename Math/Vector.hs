@@ -70,7 +70,7 @@ import Math.Indexable
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign
-import Ix
+import Data.Ix
 import Data.Complex
 import Math.Types
 import Control.Monad.State
@@ -126,7 +126,7 @@ instance (BlasOps e) => GVector Vector e where
 
 
 {-| 'CVector' instance for 'Vector'. -}
-instance BlasOps e => CVector Vector e where
+instance (BlasOps e) => CVector Vector e where
     vectorAlloc = vectorAlloc'
     withCVector = withForeignPtr . vecP
     inc = vecInc

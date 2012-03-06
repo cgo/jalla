@@ -17,7 +17,7 @@ module Math.IMM (
     IMM (..)
 ) where
 
-import Ix
+import Data.Ix
 
 {-| Indexable objects modification monad class.
     Monads in this type class are used to modify and create indexable objects

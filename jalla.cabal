@@ -6,7 +6,7 @@ license: BSD3
 license-file: LICENSE
 copyright:
 maintainer: Christian Gosch <werbung@goschs.de>
-build-depends: base (>=4), haskell98 -any, mtl -any,
+build-depends: base -any, mtl -any,
                convertible -any, array -any
 stability: Experimental
 homepage: https://github.com/cgo/jalla

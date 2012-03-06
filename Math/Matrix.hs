@@ -29,7 +29,6 @@ module Math.Matrix
          MatrixVector(..),
          -- ** Matrix/Scalar Operations
          MatrixScalar(..),
-         Floating,
         -- ** Indexable
          module Math.Indexable,
          -- * Data types
@@ -130,7 +129,7 @@ import Data.Array.Storable
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign
-import Ix
+import Data.Ix
 import Data.Complex
 import Data.List (partition)
 import Data.Maybe (fromJust)
@@ -539,7 +538,10 @@ unsafeSolveLinearSystem a b | otherwise = error "unsafeSolveLinearSystem: The sh
 
 {-| Solves a system AX = B with LAPACKs xgesv procedure. Returns
     a matrix with the solutions in its columns. -}
-solveLinearSystem :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> mat e -> mat e
+solveLinearSystem :: (BlasOps e, LapackeOps e se, CMatrix mat e) => 
+                     mat e   -- ^ The matrix /A/
+                     -> mat e -- ^ The matrix /B/, the right-hand sides.
+                     -> mat e -- ^ The solutions /X/, one in each column.
 {-# NOINLINE solveLinearSystem #-}
 solveLinearSystem a b = unsafePerformIO $
                         matrixCopy b >>= \x ->
