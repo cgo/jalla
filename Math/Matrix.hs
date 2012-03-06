@@ -640,14 +640,14 @@ withCMatrixColumn mat i act = withCMatrix mat $ \mp -> do
 column, row :: (CMatrix mat e, CVector vec e) => mat e -> Index -> vec e
 row m i = unsafePerformIO $ withCMatrixRow m i $ \ref -> copyVector ref -- A copy should be safe.
 column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref 
-{-# SPECIALIZE INLINE row :: Matrix CFloat -> Index -> Vector CFloat #-}  
-{-# SPECIALIZE INLINE row :: Matrix CDouble -> Index -> Vector CDouble #-}  
-{-# SPECIALIZE INLINE row :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
-{-# SPECIALIZE INLINE row :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
-{-# SPECIALIZE INLINE column :: Matrix CFloat -> Index -> Vector CFloat #-}  
-{-# SPECIALIZE INLINE column :: Matrix CDouble -> Index -> Vector CDouble #-}  
-{-# SPECIALIZE INLINE column :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
-{-# SPECIALIZE INLINE column :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
+{-# SPECIALIZE NOINLINE row :: Matrix CFloat -> Index -> Vector CFloat #-}  
+{-# SPECIALIZE NOINLINE row :: Matrix CDouble -> Index -> Vector CDouble #-}  
+{-# SPECIALIZE NOINLINE row :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
+{-# SPECIALIZE NOINLINE row :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
+{-# SPECIALIZE NOINLINE column :: Matrix CFloat -> Index -> Vector CFloat #-}  
+{-# SPECIALIZE NOINLINE column :: Matrix CDouble -> Index -> Vector CDouble #-}  
+{-# SPECIALIZE NOINLINE column :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
+{-# SPECIALIZE NOINLINE column :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
 
 rows, columns :: (CMatrix mat e, CVector vec e) => mat e -> [vec e]
 rows m = map (row m) [0..(rowCount m) - 1]
