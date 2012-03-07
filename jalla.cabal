@@ -7,7 +7,7 @@ license-file: LICENSE
 copyright:
 maintainer: Christian Gosch <werbung@goschs.de>
 build-depends: base -any, mtl -any,
-               convertible -any, array -any
+               convertible -any, array -any, parallel (>=3.2.0.2)
 stability: Experimental
 homepage: https://github.com/cgo/jalla
 package-url:
@@ -49,9 +49,11 @@ install-includes:
 include-dirs: /home/christian/pgm/lapack-3.4.0/lapacke/include
 hs-source-dirs: .
 other-modules: C2HS Math.Internal
-ghc-prof-options:
+ghc-prof-options: -prof -auto-all
 ghc-shared-options:
-ghc-options:
+ghc-options: -threaded
 hugs-options:
 nhc98-options:
 jhc-options:
+
+

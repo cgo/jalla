@@ -30,7 +30,8 @@ main =
         v1 = listVector [1,2,3]
         v2 = v1 |.* 2 
         randMatrix :: Int -> Int -> IO (Matrix CDouble)
-        randMatrix m n = getStdGen >>= \g -> return (listMatrix (m,n) (randoms g))
+        randMatrix m n = getStdGen >>= \g -> return (listMatrix (m,n) (repeat 1))        
+        -- randMatrix m n = return $ createMatrix (m,n) $ fill 1
     in
      do
       prettyPrintMatrixIO m
@@ -84,3 +85,11 @@ main =
       mapM_ (putStrLn . show) $ (rows m :: [Vector CDouble])
       print "Columns of m:"
       mapM_ (putStrLn . show) $ (columns m :: [Vector CDouble])
+      
+      g <- getStdGen
+      bigrand <- randMatrix 1000 100000
+      let d = matrixMultDiag bigrand (randoms g) -- [1,2,3,4,5]
+      print "Columns of m5 * something diagonal:"
+      print $ show $ length d
+--      mapM_ print d
+--      prettyPrintMatrixIO bigrand

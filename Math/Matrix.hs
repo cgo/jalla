@@ -77,6 +77,7 @@ module Math.Matrix
         pseudoInverse,
         -- ** Special Matrices
         idMatrix,
+        matrixMultDiag,
         -- ** SVD
         svd,
         SVD(..),
@@ -137,6 +138,8 @@ import Math.Types
 import Control.Monad.State
 import qualified Data.Tuple as T (swap)
 import Data.Convertible
+
+import Control.Parallel.Strategies
 
 {-
    TODO: Storage type zu CMatrix Typ hinzufuegen; Funktionen wie "unsafeSetElem",
@@ -199,7 +202,7 @@ class (CMatrix mat e, CVector vec e) => MatrixVector mat vec e where
   (|#) :: vec e -> mat e -> vec e
 
 
-{-| Matrix manipulations by a scalar. 
+{-| Matrix operations with a scalar. 
     The nomenclature is to be read /Matrix - Scalar - [operation name]/,
     where /#/ stands for matrix, /./ stands for scalar. -}
 class (Storable e, CMatrix mat e) => MatrixScalar mat e where
@@ -363,10 +366,7 @@ instance (Num e, Field1 e, BlasOps e) => GMatrix Matrix e where
   shape = matShape
   -- m ! ij = unsafePerformIO $ matrixElem m ij
 
--- BIG WARNING!
--- FIXME: This needs UndecidableInstances, which is not very good! How can I do this better?
 instance BlasOps e => MatrixMatrix Matrix e 
-
 
 instance BlasOps e => Indexable (Matrix e) IndexPair e where
     m ! ij = unsafePerformIO $ matrixElem m ij
@@ -553,8 +553,7 @@ idMatrix :: (BlasOps e, CMatrix mat e) => Index -> mat e
 idMatrix n = createMatrix (n,n) $ fill 0 >> setDiag 0 (repeat 1)
 
 
-{-| Invert. FIXME: Implement with getrf and getri, that is probably more
-efficient than first creating a dense identity matrix. -}
+{-| Invert by solving a linear system. 'invert' is probably more efficient. -}
 invert' :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> mat e
 invert' a | colCount a == rowCount a = solveLinearSystem a (idMatrix $ colCount a)
           | otherwise = error "Cannot invert non-square matrix."
@@ -652,19 +651,23 @@ column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref
 rows, columns :: (CMatrix mat e, CVector vec e) => mat e -> [vec e]
 rows m = map (row m) [0..(rowCount m) - 1]
 columns m = map (column m) [0..(colCount m) - 1]
-{-# SPECIALIZE INLINE rows :: Matrix CFloat -> [Vector CFloat] #-}  
-{-# SPECIALIZE INLINE rows :: Matrix CDouble -> [Vector CDouble] #-}  
-{-# SPECIALIZE INLINE rows :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
-{-# SPECIALIZE INLINE rows :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
-{-# SPECIALIZE INLINE columns :: Matrix CFloat -> [Vector CFloat] #-}  
-{-# SPECIALIZE INLINE columns :: Matrix CDouble -> [Vector CDouble] #-}  
-{-# SPECIALIZE INLINE columns :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
-{-# SPECIALIZE INLINE columns :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
+{-# SPECIALIZE NOINLINE rows :: Matrix CFloat -> [Vector CFloat] #-}  
+{-# SPECIALIZE NOINLINE rows :: Matrix CDouble -> [Vector CDouble] #-}  
+{-# SPECIALIZE NOINLINE rows :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
+{-# SPECIALIZE NOINLINE rows :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
+{-# SPECIALIZE NOINLINE columns :: Matrix CFloat -> [Vector CFloat] #-}  
+{-# SPECIALIZE NOINLINE columns :: Matrix CDouble -> [Vector CDouble] #-}  
+{-# SPECIALIZE NOINLINE columns :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
+{-# SPECIALIZE NOINLINE columns :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
 
 
--- FIXME: This needs to be implemented next.
---matrixMultDiag :: CMatrix mat e => mat e -> [e] -> mat e
---matrixMultDiag a d = matrixAssocs ColumnMajor
+-- FIXME: This really needs to use references instead of copied vectors, if it is to work efficiently
+-- with large matrices.
+-- How can we get RefVector from IO? Reference the ForeignPtr and do a unsafePerformIO with withForeignPtr?
+matrixMultDiag :: (BlasOps e) => CMatrix mat e => mat e -> [e] -> [Vector e]
+matrixMultDiag a d = zipWith (|.*) rs d -- parMap (rparWith rseq) (uncurry (|.*)) $ zip rs d
+  where
+    rs = columns a
 
 
 {-| SVD option for the /U/ output. -}
@@ -893,8 +896,8 @@ listMatrix :: (BlasOps e, CMatrix mat e) =>
            -> mat e -- ^ If the number of elements in the list matches the number needed for the given shape exactly, returns a Just Matrix; otherwise, returns Nothing.
 listMatrix (r,c) l = if c < 0 || c < 0
                      then error "Negative matrix shape??"
-                     else createMatrix (r,c) $
-                            mapM (uncurry setElem) $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
+                     else createMatrix (r,c) $ setElems' $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
+                            -- mapM (uncurry setElem) $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
 
 
 prettyPrintMatrix :: (GMatrix mat e) => mat e -> [String]
