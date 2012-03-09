@@ -90,6 +90,7 @@ main =
       bigrand <- randMatrix 1000 100000
       let d = matrixMultDiag bigrand (randoms g) -- [1,2,3,4,5]
       print "Columns of m5 * something diagonal:"
-      print $ show $ length d
+      print (colCount d)
+      print (rowCount d)
 --      mapM_ print d
 --      prettyPrintMatrixIO bigrand
