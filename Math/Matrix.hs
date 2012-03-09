@@ -42,12 +42,16 @@ module Math.Matrix
         MMM,
         createMatrix,
         modifyMatrix,
-        getMatrix,
+        -- getMatrix,
         setDiag,
         setRow,
         setColumn,
         setBlock,
         fillBlock,
+        scaleRow,
+        scaleColumn,
+        refRow,
+        refColumn,
         -- ** Maps over 'CMatrix'
         matrixMap,
         matrixBinMap,
@@ -218,16 +222,16 @@ class (Storable e, CMatrix mat e) => MatrixScalar mat e where
 
 {-| Interface for matrices with underlying contiguous C array storage.
     These matrices can be used with BLAS and LAPACK functions. -}
-class (GMatrix mat e) => CMatrix mat e where
+class (Storable e, BlasOps e, GMatrix mat e) => CMatrix mat e where
   -- | This is an associated vector type that /can/ be used with /mat e/.
   type CMatrixVector mat e :: *     
   -- | The same, but a vector type with a type that is the associated scalar of e. 
   type CMatrixVectorS mat e :: *    
-  matrixAlloc :: Shape -> IO (mat e)
-  withCMatrix :: mat e -> (Ptr e -> IO a) -> IO a
-  lda         :: mat e -> Index
-  order       :: mat e -> Order
-
+  matrixAlloc      :: Shape -> IO (mat e)
+  withCMatrix      :: mat e -> (Ptr e -> IO a) -> IO a
+  lda              :: mat e -> Index
+  order            :: mat e -> Order
+  matrixForeignPtr :: mat e -> ForeignPtr e
 
 
 {-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
@@ -373,13 +377,13 @@ instance BlasOps e => Indexable (Matrix e) IndexPair e where
 
 
 instance (Num e, Field1 e, BlasOps e) => CMatrix Matrix e where
-  type CMatrixVector Matrix e = Vector e
+  type CMatrixVector Matrix e  = Vector e
   type CMatrixVectorS Matrix e = Vector (FieldScalar e)
-  matrixAlloc = matrixAlloc'
-  withCMatrix = withMatrix'
-  lda         = matLDA
-  order       = matOrder
-
+  matrixAlloc                  = matrixAlloc'
+  withCMatrix                  = withMatrix'
+  lda                          = matLDA
+  order                        = matOrder
+  matrixForeignPtr             = matP
 
 
 withMatrix' :: (BlasOps e) => Matrix e -> (Ptr e -> IO a) -> IO a
@@ -389,7 +393,7 @@ withMatrix' m = withForeignPtr (matP m)
 instance (BlasOps e, Show e) => Show (Matrix e) where
   show mat = "listMatrix (" ++ show m ++ "," ++ show n ++ ") " ++ show ml
     where (m,n) = shape mat
-          ml = matrixList RowMajor mat
+          ml    = matrixList RowMajor mat
 
 
 instance (BlasOps e, Eq e) => Eq (Matrix e) where
@@ -584,6 +588,7 @@ pseudoInverse a = (NoTrans, (Trans, vt) ##! (NoTrans, sm)) ##! (Trans, u)
 
 
 data Storable e => RefVector e = RefVector {
+  refRefP :: !(ForeignPtr e),
   refVecP :: !(Ptr e),
   refVecInc :: !Index,
   refVecLength :: !Index}
@@ -611,12 +616,14 @@ instance (Field1 e, Storable e, BlasOps e) => GVector RefVector e where
   vector n = unsafePerformIO $ vectorAlloc n
   vectorLength = refVecLength
 
+instance BlasOps e => VectorScalar RefVector e
+
 
 withCMatrixRow :: Storable e => CMatrix mat e => mat e -> Index -> (RefVector e -> IO a) -> IO a
 withCMatrixRow mat i act = withCMatrix mat $ \mp -> do
   when (i >= m || i < 0) $ error "withCMatrixRow range violation." 
   let p = advancePtr mp (i * rinc)
-  act (RefVector { refVecP = p, refVecInc = cinc, refVecLength = n })
+  act (RefVector { refRefP = (matrixForeignPtr mat), refVecP = p, refVecInc = cinc, refVecLength = n })
   where
     (m,n) = shape mat
     o = order mat
@@ -627,7 +634,7 @@ withCMatrixColumn :: Storable e => CMatrix mat e => mat e -> Index -> (RefVector
 withCMatrixColumn mat i act = withCMatrix mat $ \mp -> do
   when (i >= n || i < 0) $ error "withCMatrixColumn range violation." 
   let p = advancePtr mp (i * cinc)
-  act (RefVector { refVecP = p, refVecInc = rinc, refVecLength = m })
+  act (RefVector { refRefP = (matrixForeignPtr mat), refVecP = p, refVecInc = rinc, refVecLength = m })
   where
     (m,n) = shape mat
     o = order mat
@@ -635,7 +642,19 @@ withCMatrixColumn mat i act = withCMatrix mat $ \mp -> do
                 | otherwise = (1, lda mat)
             
 
+columnRef, rowRef :: (CMatrix mat e) => mat e -> Index -> RefVector e
+{-# NOINLINE columnRef #-}
+columnRef m i = unsafePerformIO $ withCMatrixColumn m i return
+{-# NOINLINE rowRef #-}
+rowRef m i = unsafePerformIO $ withCMatrixRow m i return
 
+
+rowsRef, columnsRef :: (CMatrix mat e) => mat e -> [RefVector e]
+rowsRef m = map (rowRef m) [0..(rowCount m)-1]
+columnsRef m = map (columnRef m) [0..(colCount m)-1]
+
+
+-- Note: copyVector can not work with /RefVector/, since those can not be allocated.
 column, row :: (CMatrix mat e, CVector vec e) => mat e -> Index -> vec e
 row m i = unsafePerformIO $ withCMatrixRow m i $ \ref -> copyVector ref -- A copy should be safe.
 column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref 
@@ -647,6 +666,8 @@ column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref
 {-# SPECIALIZE NOINLINE column :: Matrix CDouble -> Index -> Vector CDouble #-}  
 {-# SPECIALIZE NOINLINE column :: Matrix (Complex CFloat) -> Index -> Vector (Complex CFloat) #-}  
 {-# SPECIALIZE NOINLINE column :: Matrix (Complex CDouble) -> Index -> Vector (Complex CDouble) #-}  
+{-# RULES "row/rowRef" row = rowRef #-}
+{-# RULES "colum/columnRef" column = columnRef #-}
 
 rows, columns :: (CMatrix mat e, CVector vec e) => mat e -> [vec e]
 rows m = map (row m) [0..(rowCount m) - 1]
@@ -659,15 +680,19 @@ columns m = map (column m) [0..(colCount m) - 1]
 {-# SPECIALIZE NOINLINE columns :: Matrix CDouble -> [Vector CDouble] #-}  
 {-# SPECIALIZE NOINLINE columns :: Matrix (Complex CFloat) -> [Vector (Complex CFloat)] #-}  
 {-# SPECIALIZE NOINLINE columns :: Matrix (Complex CDouble) -> [Vector (Complex CDouble)] #-}  
+{-# RULES "rows/rowsRef" rows = rowsRef #-}
+{-# RULES "colums/columnsRef" columns = columnsRef #-}
 
 
--- FIXME: This really needs to use references instead of copied vectors, if it is to work efficiently
+-- This uses references instead of copied vectors, to work efficiently
 -- with large matrices.
--- How can we get RefVector from IO? Reference the ForeignPtr and do a unsafePerformIO with withForeignPtr?
-matrixMultDiag :: (BlasOps e) => CMatrix mat e => mat e -> [e] -> [Vector e]
-matrixMultDiag a d = zipWith (|.*) rs d -- parMap (rparWith rseq) (uncurry (|.*)) $ zip rs d
+-- I really want to work in-place, and I should be able to in the MMM monad, in a safe way 
+-- (only the matrix under construction can be modified).
+matrixMultDiag :: (BlasOps e) => CMatrix mat e => mat e -> [e] -> mat e
+matrixMultDiag a d = modifyMatrix a $ zipWithM_ scaleColumn d [0..c-1]
   where
-    rs = columns a
+    sh@(_,c) = shape a
+
 
 
 {-| SVD option for the /U/ output. -}
@@ -945,6 +970,21 @@ createMatrix :: (BlasOps e, CMatrix mat e) =>
 createMatrix s m = unsafePerformIO $ matrixAlloc s >>= execStateT (unMMM m)
 
 
+{-| Scales the values in the given vector with a factor, /in place/.
+    Anything else is unchanged. Uses the BLAS function 'scal'. -}
+unsafeScale :: (BlasOps e, CVector vec e) => e -> vec e -> IO ()
+unsafeScale alpha x = withCVector x $ \xp -> scal n alpha xp incx
+  where n = vectorLength x
+        incx = inc x
+{-# NOINLINE unsafeScale #-}
+
+
+{-| /unsafeAccum alpha x y/ computes y <- y + alpha * x, storing the result in 
+/y/, therefore /destroying the old values of y/. Simply calls unsafeVectorAdd. -}
+unsafeAccum :: (BlasOps e, CVector vec e) => e -> vec e -> vec e -> IO ()
+unsafeAccum = unsafeVectorAdd
+
+
 {-| Modify the given matrix using the given modification action; return the modified matrix. -}
 modifyMatrix :: (BlasOps e, CMatrix mat e) => mat e -> MMM s mat e a -> mat e
 modifyMatrix mat m = unsafePerformIO $ matrixAlloc s >>= \ret ->
@@ -954,6 +994,27 @@ modifyMatrix mat m = unsafePerformIO $ matrixAlloc s >>= \ret ->
 
 getMatrix :: (BlasOps e, CMatrix mat e) => MMM s mat e (mat e)
 getMatrix = MMM get
+
+{-| Reference a row in the matrix under construction. See also 'row'. -}
+refRow :: CMatrix mat e => Index -> MMM s mat e (RefVector e)
+refRow i = MMM $ get >>= \m -> liftIO (withCMatrixRow m i return)
+
+{-| Reference a column in the matrix under construction. See also 'column'. -}
+refColumn :: CMatrix mat e => Index -> MMM s mat e (RefVector e)
+refColumn i = MMM $ get >>= \m -> liftIO (withCMatrixColumn m i return)
+
+{-| Scales (multiplies) the given row of the matrix under construction by a scalar. -}
+scaleRow :: CMatrix mat e => 
+            e                -- ^ Number to scale with.
+            -> Index          -- ^ Row index. If out of range, an exception is raised.
+            -> MMM s mat e ()
+scaleRow alpha i = MMM $ get >>= \m -> do 
+  liftIO $ withCMatrixRow m i (unsafeScale alpha)
+
+{-| Scales (multiplies) the given column of the matrix under construction by a scalar. -}
+scaleColumn :: CMatrix mat e => e -> Index -> MMM s mat e ()
+scaleColumn alpha i = MMM $ get >>= \m -> do 
+  liftIO $ withCMatrixColumn m i (unsafeScale alpha)
 
 
 {-| Modification action: Set the value of the given element. Returns True on success, or False if the element is out of bounds. -}
