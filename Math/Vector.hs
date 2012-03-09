@@ -50,7 +50,8 @@ module Math.Vector (
     copyVector,
     
     -- * Low-level, unsafe functions
-
+    unsafeVectorAdd,
+    
     -- * Re-exported
     CFloat,
     CDouble,
@@ -306,7 +307,11 @@ unsafeVectorAdd alpha v1 v2 | n == n2 =
             n = vectorLength v1
             n2 = vectorLength v2
 unsafeVectorAdd _ v1 v2 | otherwise = error $ "unsafeVectorAdd: Vector lengths must match, when adding " ++ show v1 ++ "\nand\n" ++ show v2 
-
+{-# NOINLINE unsafeVectorAdd #-}
+{-# SPECIALIZE NOINLINE unsafeVectorAdd :: CFloat -> Vector CFloat -> Vector CFloat -> IO () #-}
+{-# SPECIALIZE NOINLINE unsafeVectorAdd :: CDouble -> Vector CDouble -> Vector CDouble -> IO () #-}
+{-# SPECIALIZE NOINLINE unsafeVectorAdd :: Complex CFloat -> Vector (Complex CFloat) -> Vector (Complex CFloat) -> IO () #-}
+{-# SPECIALIZE NOINLINE unsafeVectorAdd :: Complex CDouble -> Vector (Complex CDouble) -> Vector (Complex CDouble) -> IO () #-}
 
 unsafeSetElem :: (BlasOps e, CVector vec e) => vec e -> Index -> e -> IO ()
 unsafeSetElem v i e | i >= 0 && i < vectorLength v = withCVector v $
