@@ -7,7 +7,7 @@ license-file: LICENSE
 copyright:
 maintainer: Christian Gosch <werbung@goschs.de>
 build-depends: base -any, mtl -any,
-               convertible -any, array -any, parallel (>=3.2.0.2)
+               convertible -any, QuickCheck (>= 2.4.2), random (>=1.0.1)
 stability: Experimental
 homepage: https://github.com/cgo/jalla
 package-url:
@@ -28,6 +28,7 @@ extra-tmp-files:
 exposed-modules: Math.Indexable Math.IMM Math.InnerProduct
                  BLAS.Foreign.BLAS BLAS.Foreign.BlasOps BLAS.Foreign.LAPACKE
                  BLAS.Foreign.LapackeOps Math.Matrix Math.Vector Math.Types
+                 Math.Test
 exposed: True
 buildable: True
 build-tools: c2hs -any
