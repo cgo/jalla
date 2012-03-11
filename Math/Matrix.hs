@@ -23,6 +23,7 @@ module Math.Matrix
          -- ** Matrices
          GMatrix(..),
          CMatrix(..),
+         shapeTrans,
          -- ** Matrix/Matrix Operations
          MatrixMatrix(..),
          -- ** Matrix/Vector Operations
@@ -79,7 +80,7 @@ module Math.Matrix
         -- ** Inversion
         invert,
         pseudoInverse,
-        -- ** Special Matrices
+        -- ** Special Matrices And Operations
         idMatrix,
         matrixMultDiag,
         -- ** SVD
@@ -129,8 +130,6 @@ import Math.IMM
 import Math.Vector
 import Math.Indexable
 
-import Data.Array.Storable
-
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign
@@ -140,10 +139,7 @@ import Data.List (partition)
 import Data.Maybe (fromJust)
 import Math.Types
 import Control.Monad.State
-import qualified Data.Tuple as T (swap)
 import Data.Convertible
-
-import Control.Parallel.Strategies
 
 {-
    TODO: Storage type zu CMatrix Typ hinzufuegen; Funktionen wie "unsafeSetElem",
@@ -188,12 +184,12 @@ class (Field1 e, Indexable (mat e) IndexPair e) => GMatrix mat e where
 
 class (Field1 e, BlasOps e, GMatrix mat e, CMatrix mat e) => MatrixMatrix mat e where
   (##) :: mat e -> mat e -> mat e
-  (##!) :: (Transpose, mat e) -> (Transpose, mat e) -> mat e
+  (##!) :: (mat e, Transpose) -> (mat e, Transpose) -> mat e
   (##+) :: mat e -> mat e -> mat e
   (##-) :: mat e -> mat e -> mat e
   m1 ## m2 | colCount m1 /= rowCount m2 = error "(##): shape mismatch!"
            | otherwise = unsafePerformIO $ matrixMult 1 NoTrans m1 NoTrans m2
-  (t1,m1) ##! (t2,m2) | colCountTrans t1 s1 /= rowCountTrans t2 s2 = error "(##): shape mismatch!"
+  (m1,t1) ##! (m2,t2) | colCountTrans t1 s1 /= rowCountTrans t2 s2 = error "(##): shape mismatch!"
                       | otherwise = unsafePerformIO $ matrixMult 1 t1 m1 t2 m2
                           where s1 = shape m1
                                 s2 = shape m2
@@ -234,31 +230,21 @@ class (Storable e, BlasOps e, GMatrix mat e) => CMatrix mat e where
   matrixForeignPtr :: mat e -> ForeignPtr e
 
 
-{-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
-    and 'CFloat', as well as 'Complex' 'CDouble' and 'CDouble'. -}
--- class (Field1 e) => BlasScalar e where
---   type BlasScalarT e :: *
-
--- instance BlasScalar CFloat where
---   type BlasScalarT CFloat = CFloat
-
--- instance BlasScalar CDouble where
---   type BlasScalarT CDouble = CDouble
-
--- instance BlasScalar (Complex CDouble) where
---   type BlasScalarT (Complex CDouble) = CDouble
-
--- instance BlasScalar (Complex CFloat) where
---   type BlasScalarT (Complex CFloat) = CFloat
-
-
 {-| Map over a CMatrix. 
 Applies the given function to each element in the matrix and returns the resulting matrix. -}
-matrixMap :: (Storable e1, Storable e2, CMatrix mat1 e1, CMatrix mat2 e2) => (e1 -> e2) -> mat1 e1 -> mat2 e2
+matrixMap :: (Storable e1, Storable e2, CMatrix mat1 e1, CMatrix mat2 e2) => 
+             (e1 -> e2)  -- ^ Function /f/ to map.
+             -> mat1 e1  -- ^ Input matrix A.
+             -> mat2 e2  -- ^ Return matrix B. /B_ij = f A_ij/.
 matrixMap f mat = unsafePerformIO $ let s = shape mat in 
                   matrixAlloc s >>= \m -> unsafeMatrixMap f mat m >> return m
 
-matrixBinMap :: (Storable e1, Storable e2, Storable e3, CMatrix mat1 e1, CMatrix mat2 e2, CMatrix mat3 e3) => (e1 -> e2 -> e3) -> mat1 e1 -> mat2 e2 -> mat3 e3
+{-| Map a binary function over two 'CMatrix's. -}
+matrixBinMap :: (Storable e1, Storable e2, Storable e3, CMatrix mat1 e1, CMatrix mat2 e2, CMatrix mat3 e3) => 
+                (e1 -> e2 -> e3) -- ^ Function /f/ to map.
+                -> mat1 e1      -- ^ First input matrix A.
+                -> mat2 e2      -- ^ Second input matrix B.
+                -> mat3 e3      -- ^ Return matrix C. /C_ij = f A_ij B_ij/.
 matrixBinMap f mat1 mat2 = unsafePerformIO $ do
                              let (m1,n1) = shape mat1
                                  (m2,n2) = shape mat2
@@ -319,39 +305,6 @@ unsafeMatrixBinMap f mat mat' mat'' =
           unsafe2PtrMapInc2 (i11,i12) (i21,i22) (i31,i32) f matp mat'p mat''p ((minimum [n1,n2,n3]),(minimum [m1,m2,m3]))
 
 
-               
-
-
-{- (Un?)gluecklicherweise kann man das nicht machen. StorableArray ist nicht garantiert
-   unveraendert --- im Gegensatz zum Beispiel zu Matrix e, die ja nur mit IMM modifiziert
-   werden kann und danach immer gleich bleibt. Ich kann nur eine "unsafe" Funktion
-   anbieten, die eine Matrix in ein StorableArray verwandelt; die Matrix duerfte danach aber
-   nie mehr benutzt werden (daher UNSAFE). -}
-{- instance (BlasOps e) => GMatrix (StorableArray IndexPair) e where
-    shape m = (c - a + 1, d - b + 1) where ((a,b),(c,d)) = bounds m
-
-
-instance (BlasOps e) => CMatrix (StorableArray IndexPair) e where
-    matrixAlloc (r,c) = newArray_ ((0,0),(r-1,c-1))
-    withCMatrix = withStorableArray
-    lda = colCount
-    order = RowMajor -}
-
-
-{-| Row count of a matrix with given transposedness and shape. -}
-rowCountTrans :: Transpose -> Shape -> Index
-rowCountTrans t (r,c) | t == Trans = c
-                      | otherwise = r
-
-{-| Column count of a matrix with given transposedness and shape. -}
-colCountTrans :: Transpose -> Shape -> Index
-colCountTrans t (r,c) | t == Trans = r
-                      | otherwise = c
-
-{-| Shape of a matrix with given transposedness and shape. -}
-shapeTrans :: Transpose -> Shape -> Shape
-shapeTrans t s | t == Trans = T.swap s
-               | otherwise = s
 
 -- data (Storable a) => BlasComplex a = BlasComplex { bcReal :: a, bcImag :: a }
 
@@ -548,11 +501,12 @@ solveLinearSystem :: (BlasOps e, LapackeOps e se, CMatrix mat e) =>
                      -> mat e -- ^ The solutions /X/, one in each column.
 {-# NOINLINE solveLinearSystem #-}
 solveLinearSystem a b = unsafePerformIO $
-                        matrixCopy b >>= \x ->
-                        matrixCopy a >>= \a' ->
+                        matrixCopy b NoTrans >>= \x ->
+                        matrixCopy a NoTrans >>= \a' ->
                         unsafeSolveLinearSystem a' x >> return x
 
 
+{-| Returns the square identity matrix with given row number. -}
 idMatrix :: (BlasOps e, CMatrix mat e) => Index -> mat e
 idMatrix n = createMatrix (n,n) $ fill 0 >> setDiag 0 (repeat 1)
 
@@ -567,37 +521,31 @@ invert' a | colCount a == rowCount a = solveLinearSystem a (idMatrix $ colCount 
 using solveLinearSystem. -}
 {-# NOINLINE invert #-}
 invert :: (BlasOps e, LapackeOps e se, CMatrix mat e) => mat e -> Maybe (mat e)
-invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a >>= \a' -> unsafeInvert a'
+invert a | colCount a == rowCount a = unsafePerformIO $ matrixCopy a NoTrans >>= \a' -> unsafeInvert a'
          | otherwise = Nothing --error "Cannot invert non-square matrix."
 
 
 {-| Compute the pseudo-inverse with the help of a SVD. -}
 pseudoInverse :: (BlasOps e, se ~ FieldScalar e, BlasOps se, Real se, LapackeOps e se, MatrixMatrix mat e, CMatrix mat e) 
                  => mat e -> mat e
-pseudoInverse a = (NoTrans, (Trans, vt) ##! (NoTrans, sm)) ##! (Trans, u)
+pseudoInverse a = (matrixMultDiag (vt,Trans) s, NoTrans) ##! (u,Trans)
+  -- ((vt,Trans) ##! (sm,NoTrans), NoTrans) ##! (u,Trans)
   where svd'  = (svd a (SVDU SVDThin, SVDVT SVDThin))
         s     = map (\x -> if x /= 0 then 1 / (realToFrac x) else 0) $ svdS svd'
-        -- FIXME: This is slow and uses more memory than needed.
-        -- Add a (matrix times diagonal) function and use that instead.
-        sm    = createMatrix (n',n') $ fill 0 >> setDiag 0 s
-        n'    = min m n
-        (m,n) = shape a
         u     = fromJust $ svdU svd'
         vt    = fromJust $ svdVT svd'
-  -- fmap (\t -> (Trans, mat) ##! (NoTrans, t)) $ invert ((NoTrans, mat) ##! (Trans, mat))
 
 
+{-| A construct to enable us to reference rows and columns in matrices, thereby
+saving some cost on copying and memory allocation. The referenced matrix will not be
+garbage collected (if I understand 'ForeignPtr' right) before one of the 'RefVector's
+referencing it. -}
 data Storable e => RefVector e = RefVector {
   refRefP :: !(ForeignPtr e),
   refVecP :: !(Ptr e),
   refVecInc :: !Index,
   refVecLength :: !Index}
 
--- refVectorAlloc :: (Storable e, BlasOps e) => Index -> IO (RefVector e)
--- refVectorAlloc n = mallocForeignPtrArray n >>= \a -> return $ RefVector { refP = a, 
---                                                                           refVecP = a, 
---                                                                           refVecInc = 1, 
---                                                                           refVecLength = n }
 
 instance (Show e, Field1 e, Storable e, BlasOps e) => Show (RefVector e) where
   show v = "listVector " ++ show (vectorList v)
@@ -619,6 +567,7 @@ instance (Field1 e, Storable e, BlasOps e) => GVector RefVector e where
 instance BlasOps e => VectorScalar RefVector e
 
 
+{-| Run an IO action on a row of a matrix, without copying the vector. -}
 withCMatrixRow :: Storable e => CMatrix mat e => mat e -> Index -> (RefVector e -> IO a) -> IO a
 withCMatrixRow mat i act = withCMatrix mat $ \mp -> do
   when (i >= m || i < 0) $ error "withCMatrixRow range violation." 
@@ -630,6 +579,7 @@ withCMatrixRow mat i act = withCMatrix mat $ \mp -> do
     (rinc,cinc) | o == RowMajor = (lda mat, 1)
                 | otherwise = (1, lda mat)
             
+{-| Run an IO action on a column of a matrix, without copying the vector. -}
 withCMatrixColumn :: Storable e => CMatrix mat e => mat e -> Index -> (RefVector e -> IO a) -> IO a
 withCMatrixColumn mat i act = withCMatrix mat $ \mp -> do
   when (i >= n || i < 0) $ error "withCMatrixColumn range violation." 
@@ -642,6 +592,7 @@ withCMatrixColumn mat i act = withCMatrix mat $ \mp -> do
                 | otherwise = (1, lda mat)
             
 
+{-| Return a 'RefVector' to a column or row. -}
 columnRef, rowRef :: (CMatrix mat e) => mat e -> Index -> RefVector e
 {-# NOINLINE columnRef #-}
 columnRef m i = unsafePerformIO $ withCMatrixColumn m i return
@@ -649,12 +600,14 @@ columnRef m i = unsafePerformIO $ withCMatrixColumn m i return
 rowRef m i = unsafePerformIO $ withCMatrixRow m i return
 
 
+{-| Return 'RefVector's to all rows or columns. -}
 rowsRef, columnsRef :: (CMatrix mat e) => mat e -> [RefVector e]
 rowsRef m = map (rowRef m) [0..(rowCount m)-1]
 columnsRef m = map (columnRef m) [0..(colCount m)-1]
 
 
 -- Note: copyVector can not work with /RefVector/, since those can not be allocated.
+{-| Get a column or row from a matrix. -}
 column, row :: (CMatrix mat e, CVector vec e) => mat e -> Index -> vec e
 row m i = unsafePerformIO $ withCMatrixRow m i $ \ref -> copyVector ref -- A copy should be safe.
 column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref 
@@ -669,6 +622,7 @@ column m i = unsafePerformIO $ withCMatrixColumn m i $ \ref -> copyVector ref
 {-# RULES "row/rowRef" row = rowRef #-}
 {-# RULES "colum/columnRef" column = columnRef #-}
 
+{-| Get all rows or columns from a matrix. -}
 rows, columns :: (CMatrix mat e, CVector vec e) => mat e -> [vec e]
 rows m = map (row m) [0..(rowCount m) - 1]
 columns m = map (column m) [0..(colCount m) - 1]
@@ -684,14 +638,17 @@ columns m = map (column m) [0..(colCount m) - 1]
 {-# RULES "colums/columnsRef" columns = columnsRef #-}
 
 
--- This uses references instead of copied vectors, to work efficiently
--- with large matrices.
--- I really want to work in-place, and I should be able to in the MMM monad, in a safe way 
--- (only the matrix under construction can be modified).
-matrixMultDiag :: (BlasOps e) => CMatrix mat e => mat e -> [e] -> mat e
-matrixMultDiag a d = modifyMatrix a $ zipWithM_ scaleColumn d [0..c-1]
-  where
-    sh@(_,c) = shape a
+{-| Multiply a matrix with a diagonal matrix, given only as a list of diagonal entries.
+This uses references instead of copied vectors, to work more memory efficient
+with large matrices. -}
+matrixMultDiag :: (BlasOps e) => CMatrix mat e => 
+                  (mat e, Transpose) -- ^ Matrix /A/ and information on whether to use it transposed or not.
+                  -> [e]              -- ^ Diagonals of a matrix /S/
+                  -> mat e            -- ^ /A * S/ or /A^T * S/.
+matrixMultDiag (a,t) d = modifyMatrix a t $ zipWithM_ scaleColumn d [0..c-1]
+  where sh@(_,c) = shapeTrans t (shape a)
+--I really want to work in-place, and I should be able to in the MMM monad, in a safe way 
+--(only the matrix under construction can be modified).
 
 
 
@@ -767,7 +724,7 @@ svd :: (BlasOps e, se ~ FieldScalar e, BlasOps se, LapackeOps e se, CMatrix mat 
        -> SVD mat e  -- ^ Returns the SVD.
 svd a opts@(SVDU optu, SVDVT optvt) =
   unsafePerformIO $ do
-    matrixCopy a >>= \acopy ->
+    matrixCopy a NoTrans >>= \acopy ->
       matrixAlloc (shapeU optu) >>= \u ->
       matrixAlloc (shapeVT optvt) >>= \vt ->
       vectorAlloc len_s >>= \(s :: Vector se) -> do
@@ -870,18 +827,32 @@ unsafeMatrixFill m e = let (r,c) = shape m
 
 
 {-| Copies a matrix into the storage of another matrix, in-place and therefore unsafe
-Uses the BLAS copy routine from BlasOps. -}
-unsafeMatrixCopy :: (BlasOps e, CMatrix mat e) => mat e -> mat e -> IO ()
-unsafeMatrixCopy src dst | shape src == shape dst = withCMatrix src $ \s ->
-  withCMatrix dst $ \d -> copy n s 1 d 1
-    where n = (rowCount src) * (colCount src)
+Uses the BLAS copy routine from BlasOps. /NOTE/: This uses BLAS 'copy', i.e. the LDA /must/ be either m or n,
+where (m,n) is the shape of the matrix. -}
+unsafeMatrixCopy :: (BlasOps e, CMatrix mat e) => 
+                    mat e        -- ^ Source /A/ to copy from.
+                    -> Transpose  -- ^ If /Trans/, copies /A^T/ to B, otherwise copies /A/.
+                    -> mat e      -- ^ Destination /B/. Must have the right dimensions.
+                    -> IO () 
+unsafeMatrixCopy src t dst | shapeTrans t (shape src) == shape dst = 
+  case t of
+    NoTrans -> zipWithM_ unsafeCopyVector src_rows dst_rows
+    -- withCMatrix src $ \s ->
+    -- withCMatrix dst $ \d -> copy n s 1 d 1
+    Trans   -> zipWithM_ unsafeCopyVector src_cols dst_rows
+  where 
+    src_cols = columnsRef src
+    src_rows = rowsRef src
+    dst_rows = rowsRef dst
+    n        = (rowCount src) * (colCount src)
+unsafeMatrixCopy _ _ _ | otherwise = error "unsafeMatrixCopy: shape mismatch."
 
 
 {-| Copies a matrix into a new matrix of the same shape.
 When using unsafe operations which work in-place, this should be used to copy a matrix
-before using such an unsafe function. Then, one can think of guaranteeing its safety by using unsafePerformIO. -}
-matrixCopy :: (BlasOps e, CMatrix mat e) => mat e -> IO (mat e)
-matrixCopy a = matrixAlloc (shape a) >>= \ret -> unsafeMatrixCopy a ret >> return ret
+before using such an unsafe function. -}
+matrixCopy :: (BlasOps e, CMatrix mat e) => mat e -> Transpose -> IO (mat e)
+matrixCopy a t = matrixAlloc (shapeTrans t (shape a)) >>= \ret -> unsafeMatrixCopy a t ret >> return ret
 
 
 matrixMap' :: (BlasOps e1, BlasOps e2, CMatrix mat1 e1, CMatrix mat2 e2) => (e1 -> e2) -> mat1 e1 -> IO (mat2 e2)
@@ -913,7 +884,6 @@ matrixLists mat = let (r,c) = shape mat
                   in [[mat ! (i,j) | j <- [0..(c-1)]] | i <- [0..(r-1)]]
 
 
--- FIXME: The use of length in here is not very good.
 {-| Create a matrix from a list of elements, stored in row-major. -}
 listMatrix :: (BlasOps e, CMatrix mat e) =>
            Shape -- ^ Shape of the matrix
@@ -946,14 +916,11 @@ newtype (BlasOps e, CMatrix mat e) => MMM s mat e a = MMM { unMMM :: MMonad mat 
 -- Make a copy of the matrix, put it in the state, and let modification functions run on it.
 -- Does /not/ allow anything else to be modified than the copy of the matrix that is given as argument.
 runMMM :: (BlasOps e, CMatrix mat e) => mat e -> MMM s mat e a -> IO (mat e)
-runMMM mat m = matrixAlloc s >>= \ret -> unsafeMatrixCopy mat ret >> execStateT (unMMM m) ret
+runMMM mat m = matrixAlloc s >>= \ret -> unsafeMatrixCopy mat NoTrans ret >> execStateT (unMMM m) ret
   where s = shape mat
 
 
 instance (BlasOps e, CMatrix mat e) => IMM (MMM s mat e) IndexPair (mat e) e where
---    create   = createMatrix
---    modify   = modifyMatrix
---    getO     = getMatrix
     setElem  = setElem'
     setElems = setElems'
     fill     = fill'
@@ -986,21 +953,22 @@ unsafeAccum = unsafeVectorAdd
 
 
 {-| Modify the given matrix using the given modification action; return the modified matrix. -}
-modifyMatrix :: (BlasOps e, CMatrix mat e) => mat e -> MMM s mat e a -> mat e
-modifyMatrix mat m = unsafePerformIO $ matrixAlloc s >>= \ret ->
-  unsafeMatrixCopy mat ret >> execStateT (unMMM m) ret
-    where s = shape mat
+modifyMatrix :: (BlasOps e, CMatrix mat e) => mat e -> Transpose -> MMM s mat e a -> mat e
+modifyMatrix mat t m = unsafePerformIO $ matrixAlloc s >>= \ret ->
+  unsafeMatrixCopy mat t ret >> execStateT (unMMM m) ret
+    where s = shapeTrans t (shape mat)
+{-# NOINLINE modifyMatrix #-}
 
 
 getMatrix :: (BlasOps e, CMatrix mat e) => MMM s mat e (mat e)
 getMatrix = MMM get
 
 {-| Reference a row in the matrix under construction. See also 'row'. -}
-refRow :: CMatrix mat e => Index -> MMM s mat e (RefVector e)
+refRow   :: CMatrix mat e => Index -> MMM s mat e (RefVector e)
 refRow i = MMM $ get >>= \m -> liftIO (withCMatrixRow m i return)
 
 {-| Reference a column in the matrix under construction. See also 'column'. -}
-refColumn :: CMatrix mat e => Index -> MMM s mat e (RefVector e)
+refColumn   :: CMatrix mat e => Index -> MMM s mat e (RefVector e)
 refColumn i = MMM $ get >>= \m -> liftIO (withCMatrixColumn m i return)
 
 {-| Scales (multiplies) the given row of the matrix under construction by a scalar. -}
@@ -1094,21 +1062,3 @@ fillBlock start end = setElems . zip (range (start,end)) . repeat
 {-| Get an element of the matrix currently under modification. -}
 getElem' :: (BlasOps e, CMatrix mat e) => IndexPair -> MMM s mat e e
 getElem' ij = MMM $ get >>= \m -> liftIO $ matrixElem m ij
-
-
-
-
-----------------------
--- Helpers for indices
-
-{-| Generate indices of a diagonal in a matrix of given shape. -}
-diagIndices :: Shape     -- ^ The shape of the matrix (rows,columns)
-              -> Index   -- ^ The index of the diagonal -- 0: main diagonal; < 0: lower diagonals; >0: upper diagonals
-              -> [IndexPair] -- ^ Index list. Empty if there is no such diagonal.
-diagIndices (r,c) d
-  | d >= 0 && d < c    = diagIndices' (0, d, min (c - d) r)
-  | d < 0 && d > (-r) = diagIndices' (-d, 0, min (r + d) c)
-  | otherwise        = []
-    where
-      diagIndices' :: (Index,Index,Index) -> [(Index,Index)]
-      diagIndices' (rstart,cstart,n) = [(rstart + i, cstart + i) | i <- [0..(max 0 (n-1))]]

@@ -13,26 +13,65 @@
 -----------------------------------------------------------------------------
 
 module Math.Types (
-                   Field1(..),
-                   module Data.Complex,
-                   Index,
-                   Shape,
-                   IndexPair,
-                   BLASEnum(..),
-                   LAPACKEEnum(..),
-                   Order(..),
-                   Transpose(..),
-                   UpLo(..)) where
+  -- * Classes
+  Field1(..),
+  -- ** BLAS And LAPACK 
+  BLASEnum(..),
+  LAPACKEEnum(..),
+  -- * Indexing
+  Index,
+  Shape,
+  IndexPair,
+  rowCountTrans,
+  colCountTrans,
+  shapeTrans,
+  diagIndices,
+  -- * Information About Matrices And Storage
+  Order(..),
+  Transpose(..),
+  UpLo(..),
+  module Data.Complex,
+) where
 
 import Data.Complex
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign
--- import Data.Convertible
+import qualified Data.Tuple as T (swap)
+
 
 type Index = Int
 type Shape = (Index,Index)
 type IndexPair = (Index,Index)
+
+
+{-| Row count of a matrix with given transposedness and shape. -}
+rowCountTrans :: Transpose -> Shape -> Index
+rowCountTrans t (r,c) | t == Trans = c
+                      | otherwise = r
+
+{-| Column count of a matrix with given transposedness and shape. -}
+colCountTrans :: Transpose -> Shape -> Index
+colCountTrans t (r,c) | t == Trans = r
+                      | otherwise = c
+
+{-| Shape of a matrix with given transposedness and shape. -}
+shapeTrans :: Transpose -> Shape -> Shape
+shapeTrans t s | t == Trans = T.swap s
+               | otherwise = s
+
+
+{-| Generate indices of a diagonal in a matrix of given shape. -}
+diagIndices :: Shape     -- ^ The shape of the matrix (rows,columns)
+              -> Index   -- ^ The index of the diagonal -- 0: main diagonal; < 0: lower diagonals; >0: upper diagonals
+              -> [IndexPair] -- ^ Index list. Empty if there is no such diagonal.
+diagIndices (r,c) d
+  | d >= 0 && d < c    = diagIndices' (0, d, min (c - d) r)
+  | d < 0 && d > (-r) = diagIndices' (-d, 0, min (r + d) c)
+  | otherwise        = []
+    where
+      diagIndices' :: (Index,Index,Index) -> [(Index,Index)]
+      diagIndices' (rstart,cstart,n) = [(rstart + i, cstart + i) | i <- [0..(max 0 (n-1))]]
 
 
 data Order = RowMajor | ColumnMajor deriving (Eq, Show)

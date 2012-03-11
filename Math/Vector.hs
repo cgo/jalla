@@ -51,6 +51,7 @@ module Math.Vector (
     
     -- * Low-level, unsafe functions
     unsafeVectorAdd,
+    unsafeCopyVector,
     
     -- * Re-exported
     CFloat,
@@ -223,8 +224,11 @@ vectorMap :: (CVector vec1 e1, CVector vec2 e2) => (e1 -> e2) -> vec1 e1 -> vec2
 vectorMap f v1 = unsafePerformIO $
                  vectorAlloc n >>= \v2 -> unsafeVectorMap f v1 v2 >> return v2
   where n = vectorLength v1
-                                          
-
+{-# NOINLINE vectorMap #-}                                          
+{-# SPECIALIZE NOINLINE vectorMap :: (CFloat -> CFloat) -> Vector CFloat -> Vector CFloat #-}
+{-# SPECIALIZE NOINLINE vectorMap :: (CDouble -> CDouble) -> Vector CDouble -> Vector CDouble #-}
+{-# SPECIALIZE NOINLINE vectorMap :: (Complex CFloat -> Complex CFloat) -> Vector (Complex CFloat) -> Vector (Complex CFloat) #-}
+{-# SPECIALIZE NOINLINE vectorMap :: (Complex CDouble -> Complex CDouble) -> Vector (Complex CDouble) -> Vector (Complex CDouble) #-}
 
 unsafeVectorMap :: (CVector vec1 e1, CVector vec2 e2) => (e1 -> e2) -> vec1 e1 -> vec2 e2 -> IO ()
 unsafeVectorMap f v1 v2 = 
@@ -235,6 +239,10 @@ unsafeVectorMap f v1 v2 =
     i1 = inc v1
     i2 = inc v2
     n = min (vectorLength v1) (vectorLength v2)
+{-# SPECIALIZE INLINE unsafeVectorMap :: (CFloat -> CFloat) -> Vector CFloat -> Vector CFloat -> IO () #-}
+{-# SPECIALIZE INLINE unsafeVectorMap :: (CDouble -> CDouble) -> Vector CDouble -> Vector CDouble -> IO () #-}
+{-# SPECIALIZE INLINE unsafeVectorMap :: (Complex CFloat -> Complex CFloat) -> Vector (Complex CFloat) -> Vector (Complex CFloat) -> IO () #-}
+{-# SPECIALIZE INLINE unsafeVectorMap :: (Complex CDouble -> Complex CDouble) -> Vector (Complex CDouble) -> Vector (Complex CDouble) -> IO () #-}
 
 
 {-| Maps a binary function to the elements of two vectors and returns the resulting vector. -}
@@ -346,6 +354,20 @@ copyVector v = vectorAlloc n >>= \ret ->
                withCVector ret $ \pret ->
                copy n p (inc v) pret (inc ret) >> return ret
                where n = vectorLength v
+
+
+{-| Copies from one vector to the other, in-place and therefore unsafely.
+Uses the BLAS 'copy' function. /min (vectorLength src) (vectorlength dest)/
+elements are copied from the first to the second vector. -}
+unsafeCopyVector :: (CVector vec e, CVector vec2 e) => 
+                    vec e    -- ^ The source vector.
+                    -> vec2 e -- ^ The destination vector.
+                    -> IO ()
+unsafeCopyVector src dest =
+  withCVector src $ \srcp -> 
+  withCVector dest $ \destp ->
+  copy n srcp (inc src) destp (inc dest)
+  where n = min (vectorLength src) (vectorLength dest)
 
 --------------------------
 -- Monadic vector manipulations
