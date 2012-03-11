@@ -6,10 +6,17 @@ module Main where
 
 import "jalla" Math.Matrix
 import "jalla" Math.Vector
+import "jalla" Math.Test
 import Data.Maybe
 import System.Random
+import Test.QuickCheck
 
-main = 
+main = do
+  quickCheck prop_pseudoInverse
+  -- sample (arbitrary :: Gen (Matrix CFloat))
+  -- prettyPrintMatrixIO m
+
+testSome = 
     let
         m :: Matrix CFloat
         m = createMatrix (10,4) $ do
@@ -30,7 +37,7 @@ main =
         v1 = listVector [1,2,3]
         v2 = v1 |.* 2 
         randMatrix :: Int -> Int -> IO (Matrix CDouble)
-        randMatrix m n = getStdGen >>= \g -> return (listMatrix (m,n) (repeat 1))        
+        randMatrix m n = getStdGen >>= \g -> return (listMatrix (m,n) (randoms g))        
         -- randMatrix m n = return $ createMatrix (m,n) $ fill 1
     in
      do
@@ -71,6 +78,10 @@ main =
       m <- randMatrix 3 4
       print "Random matrix m:"
       prettyPrintMatrixIO m
+      print "Rows of m:"
+      mapM_ (putStrLn . show) $ (rows m :: [Vector CDouble])
+      print "Columns of m:"
+      mapM_ (putStrLn . show) $ (columns m :: [Vector CDouble])
       print "pseudo inverse m' of m:"
       prettyPrintMatrixIO $ pseudoInverse m
       print "m * m':"
@@ -81,15 +92,11 @@ main =
       print "Row 0 of m:"
       print $ (row m 0 :: Vector CDouble)
       
-      print "Rows of m:"
-      mapM_ (putStrLn . show) $ (rows m :: [Vector CDouble])
-      print "Columns of m:"
-      mapM_ (putStrLn . show) $ (columns m :: [Vector CDouble])
       
       g <- getStdGen
       bigrand <- randMatrix 1000 100000
-      let d = matrixMultDiag bigrand (randoms g) -- [1,2,3,4,5]
-      print "Columns of m5 * something diagonal:"
+      let d = matrixMultDiag (bigrand,NoTrans) (randoms g) -- [1,2,3,4,5]
+      print "Columns and rows of m5 * something diagonal:"
       print (colCount d)
       print (rowCount d)
 --      mapM_ print d
