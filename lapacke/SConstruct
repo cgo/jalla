@@ -1,0 +1,55 @@
+#
+# This file is part of Jalla <http://github.com/cgo/jalla>.
+# Copyright 2012 Christian Gosch.
+#
+#
+# SCons file for simplifying building LAPACKE.
+# This file takes the C sources and tries to remove those which are concerned
+# with test generation and with XBLAS dependencies.
+# You can move them back in if you need them by modifying the "lapacke_sources = filter(...)"
+# lines below.
+# Those were not a problem for the static library, but for the shared library
+# that I wanted for use in GHCi, with the stock LAPACK libraries delivered with
+# Ubuntu 11.10, which are /older/ versions than 3.4.0.
+#
+# Instructions:
+#
+# 1. You may have to modify the library paths and/or names below to suit your system.
+# 2. Copy this SConstruct file to the top level directory of LAPACKE
+# 3. Call "scons" on the command line, possibly "scons -jN" where N is the
+#    number of processors to use.
+# 4. Copy the built libraries where you need them.
+#
+# This worked for the LAPACKE which was delivered with LAPACK 3.4.0.
+#
+# Builds a shared and a static library.
+# 
+# Dependencies: LAPACK, BLAS, CBLAS
+#
+
+import re, sys, glob
+
+env = Environment ()
+utils_sources   = Glob ('utils/*.c')
+
+# XBLAS dependent functions
+x_regex = re.compile ('xx\.c$|sx\.c$|xx_work\.c$|sx_work\.c$') # |^cla_|^sla_')
+# Test generation functions
+testing_regex = re.compile ('.*lapacke_[sdcz]la')
+# Functions apparently not available in stock Ubuntu 11.10 LAPACK, only in LAPACK 3.4.0
+other_regex = re.compile ('qrt\.c$|qrt2\.c$|qrt3\.c|rfb\.c$|qrt_work\.c$|qrt2_work\.c$|qrt3_work\.c|rfb_work\.c$')
+
+# Filtering out XBLAS dependencies
+lapacke_sources = filter (lambda fn: x_regex.search(fn) == None, glob.glob ('src/*.c'))
+# Filtering out testing dependencies
+lapacke_sources = filter (lambda fn: testing_regex.search(fn) == None, lapacke_sources)
+# Filtering out other (new 3.4.0 functions??) dependencies
+lapacke_sources = filter (lambda fn: other_regex.search(fn) == None, lapacke_sources)
+
+env.Append (CCFLAGS = '-DHAVE_LAPACK_CONFIG_H  -DLAPACK_COMPLEX_STRUCTURE')
+env.Append (LIBS = ['lapack', 'f77blas', 'cblas', 'm'])
+env.Append (CPPPATH = ['../include', './include'])
+env.Append (LIBPATH = ['/usr/lib/atlas-base/'])
+
+env.SharedLibrary ('lapacke', lapacke_sources + utils_sources)
+env.StaticLibrary ('lapacke', lapacke_sources + utils_sources)
