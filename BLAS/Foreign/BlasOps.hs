@@ -26,30 +26,34 @@ import Math.Types
 convComplex :: (RealFloat a, RealFloat b) => Complex a -> Complex b
 convComplex (a :+ b) = (realToFrac a :+ realToFrac b)
 
-{- The following were generated with parseblas.hs -}
+{- The following were generated with parseblas.hs and partly hand-tuned afterwards. -}
 
+{- | Low level BLAS operations. Directly call the wrapped BLAS functions.
+Things to note: /dot/ returns a /Float/ for the Float instance. If you want the double precision
+result, use 'realdot' from the 'BlasOpsReal' class. -}
 class (Field1 e, Storable e) => BlasOps e where
-  nrm2 :: Int -> Ptr e -> Int -> IO e
-  asum :: Int -> Ptr e -> Int -> IO e
+  nrm2  :: Int -> Ptr e -> Int -> IO e
+  asum  :: Int -> Ptr e -> Int -> IO e
   iamax :: Int -> Ptr e -> Int -> IO CblasIndex
-  swap :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  copy :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  axpy :: Int -> e -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  scal :: Int -> e -> Ptr e -> Int -> IO ()
-  gemv :: CblasOrder -> CblasTranspose -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
-  gbmv :: CblasOrder -> CblasTranspose -> Int -> Int -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
-  trmv :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  tbmv :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  tpmv :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Ptr e -> Int -> IO ()
-  trsv :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  tbsv :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  tpsv :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Ptr e -> Int -> IO ()
-  gemm :: CblasOrder -> CblasTranspose -> CblasTranspose -> Int -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
-  symm :: CblasOrder -> CblasSide -> CblasUplo -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
-  syrk :: CblasOrder -> CblasUplo -> CblasTranspose -> Int -> Int -> e -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
+  swap  :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  copy  :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  axpy  :: Int -> e -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  scal  :: Int -> e -> Ptr e -> Int -> IO ()
+  dot   :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO e
+  gemv  :: CblasOrder -> CblasTranspose -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
+  gbmv  :: CblasOrder -> CblasTranspose -> Int -> Int -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
+  trmv  :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  tbmv  :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  tpmv  :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Ptr e -> Int -> IO ()
+  trsv  :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  tbsv  :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  tpsv  :: CblasOrder -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Ptr e -> Ptr e -> Int -> IO ()
+  gemm  :: CblasOrder -> CblasTranspose -> CblasTranspose -> Int -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
+  symm  :: CblasOrder -> CblasSide -> CblasUplo -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
+  syrk  :: CblasOrder -> CblasUplo -> CblasTranspose -> Int -> Int -> e -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
   syr2k :: CblasOrder -> CblasUplo -> CblasTranspose -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> e -> Ptr e -> Int -> IO ()
-  trmm :: CblasOrder -> CblasSide -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> IO ()
-  trsm :: CblasOrder -> CblasSide -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  trmm  :: CblasOrder -> CblasSide -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> IO ()
+  trsm  :: CblasOrder -> CblasSide -> CblasUplo -> CblasTranspose -> CblasDiag -> Int -> Int -> e -> Ptr e -> Int -> Ptr e -> Int -> IO ()
 
 class (BlasOps (Complex e)) => BlasOpsComplex e where
   dotu_sub :: Int -> Ptr (Complex e) -> Int -> Ptr (Complex e) -> Int -> Ptr (Complex e) -> IO ()
@@ -68,8 +72,8 @@ class (BlasOps (Complex e)) => BlasOpsComplex e where
   herk :: CblasOrder -> CblasUplo -> CblasTranspose -> Int -> Int -> e -> Ptr (Complex e) -> Int -> e -> Ptr (Complex e) -> Int -> IO ()
   her2k :: CblasOrder -> CblasUplo -> CblasTranspose -> Int -> Int -> Ptr (Complex e) -> Ptr (Complex e) -> Int -> Ptr (Complex e) -> Int -> e -> Ptr (Complex e) -> Int -> IO ()
 
-class (BlasOps e) => BlasOpsReal e where
-  dot :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO CDouble
+class (Real e, BlasOps e) => BlasOpsReal e where
+  realdot :: Int -> Ptr e -> Int -> Ptr e -> Int -> IO CDouble
   rotg :: Ptr e -> Ptr e -> Ptr e -> Ptr e -> IO ()
   rotmg :: Ptr e -> Ptr e -> Ptr e -> e -> Ptr e -> IO ()
   rot :: Int -> Ptr e -> Int -> Ptr e -> Int -> e -> e -> IO ()
@@ -91,6 +95,7 @@ instance BlasOps CFloat where
   copy = scopy
   axpy = saxpy
   scal = sscal
+  dot n a inca b incb = fmap realToFrac $ realdot n a inca b incb
   gemv = sgemv
   gbmv = sgbmv
   trmv = strmv
@@ -114,6 +119,7 @@ instance BlasOps CDouble where
   copy = dcopy
   axpy = daxpy
   scal = dscal
+  dot n a inca b incb = fmap realToFrac $ realdot n a inca b incb
   gemv = dgemv
   gbmv = dgbmv
   trmv = dtrmv
@@ -137,6 +143,7 @@ instance BlasOps (Complex CFloat) where
   copy = ccopy
   axpy a0 a1 a2 a3 a4 a5 = with (convComplex a1) $ \a1' -> caxpy a0 a1' a2 a3 a4 a5
   scal a0 a1 a2 a3 = with (convComplex a1) $ \a1' -> cscal a0 a1' a2 a3
+  dot n a inca b incb = with (0 :+ 0) $ \retp -> dotu_sub n a inca b incb retp >> peek retp
   gemv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 = with (convComplex a4) $ \a4' -> with (convComplex a9) $ \a9' -> cgemv a0 a1 a2 a3 a4' a5 a6 a7 a8 a9' a10 a11
   gbmv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 = with (convComplex a6) $ \a6' -> with (convComplex a11) $ \a11' -> cgbmv a0 a1 a2 a3 a4 a5 a6' a7 a8 a9 a10 a11' a12 a13
   trmv = ctrmv
@@ -160,6 +167,7 @@ instance BlasOps (Complex CDouble) where
   copy = zcopy
   axpy a0 a1 a2 a3 a4 a5 = with (convComplex a1) $ \a1' -> zaxpy a0 a1' a2 a3 a4 a5
   scal a0 a1 a2 a3 = with (convComplex a1) $ \a1' -> zscal a0 a1' a2 a3
+  dot n a inca b incb = with (0 :+ 0) $ \retp -> dotu_sub n a inca b incb retp >> peek retp
   gemv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 = with (convComplex a4) $ \a4' -> with (convComplex a9) $ \a9' -> zgemv a0 a1 a2 a3 a4' a5 a6 a7 a8 a9' a10 a11
   gbmv a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 = with (convComplex a6) $ \a6' -> with (convComplex a11) $ \a11' -> zgbmv a0 a1 a2 a3 a4 a5 a6' a7 a8 a9 a10 a11' a12 a13
   trmv = ztrmv
@@ -210,7 +218,7 @@ instance BlasOpsComplex CDouble where
   her2k = zher2k
 
 instance BlasOpsReal CFloat where
-  dot = dsdot
+  realdot = dsdot
   rotg = srotg
   rotmg = srotmg
   rot = srot
@@ -225,7 +233,7 @@ instance BlasOpsReal CFloat where
   spr2 = sspr2
 
 instance BlasOpsReal CDouble where
-  dot = ddot
+  realdot = ddot
   rotg = drotg
   rotmg = drotmg
   rot = drot
