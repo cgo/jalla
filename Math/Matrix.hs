@@ -80,6 +80,8 @@ module Math.Matrix
         -- ** Inversion
         invert,
         pseudoInverse,
+        -- ** Norms
+        frobNorm,
         -- ** Special Matrices And Operations
         idMatrix,
         matrixMultDiag,
@@ -564,6 +566,7 @@ instance (Field1 e, Storable e, BlasOps e) => GVector RefVector e where
   vector n = unsafePerformIO $ vectorAlloc n
   vectorLength = refVecLength
 
+instance BlasOps e => VectorVector RefVector e
 instance BlasOps e => VectorScalar RefVector e
 
 
@@ -757,6 +760,12 @@ unsafeInvert mat = withCMatrix mat $ \mp ->
                      o = toLapacke $ order mat
                      ldA = lda mat
                      (m,n) = shape mat
+
+
+{-| Compute the Frobenius norm of a matrix. -}
+frobNorm :: (BlasOps e, CMatrix mat e) => mat e -> e
+frobNorm mat = sqrt $ sum $ map (\v -> v ||* v) vs
+  where vs = rowsRef mat
 
 
 matrixAlloc' :: (BlasOps e) => Shape -> IO (Matrix e)
