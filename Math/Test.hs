@@ -1,7 +1,11 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 
 module Math.Test (Arbitrary(..),
-                  prop_pseudoInverse) where
+                  prop_pseudoInverse,
+                  prop_frobNorm,
+                  prop_frobNorm2,
+                  prop_frobNorm3,
+                  prop_frobNorm4) where
 
 import BLAS.Foreign.BlasOps
 import Math.Matrix
@@ -29,8 +33,8 @@ class Bounds a where
 
 
 instance (RealFloat a) => Bounds a where
-  minB = fromIntegral (minBound :: Int)
-  maxB = fromIntegral (maxBound :: Int)
+  minB = realToFrac (-1000) -- fromIntegral (minBound :: Int)
+  maxB = realToFrac (1000)  -- fromIntegral (maxBound :: Int)
   
 instance (Bounds a, RealFloat a) => Bounds (Complex a) where
   minB = (minB :+ minB)
@@ -49,3 +53,22 @@ instance (Bounds e, BlasOps e, Random e) => Arbitrary (Matrix e) where
 prop_pseudoInverse :: Matrix CDouble -> Bool
 prop_pseudoInverse m = m == m
 
+prop_frobNorm :: Matrix CDouble -> Bool
+prop_frobNorm m = (2 * abs (a - b) / (abs a + abs b)) <= 1e-8
+  where a = frobNorm m 
+        b = sqrt $ sum $ map (^2) $ matrixList RowMajor m
+        
+prop_frobNorm2 :: Matrix CFloat -> Bool
+prop_frobNorm2 m = (2 * abs (a - b) / (abs a + abs b)) <= 1e-6
+  where a = frobNorm m 
+        b = realToFrac ((sqrt $ sum $ map ((^2) . realToFrac) $ matrixList RowMajor m) :: CDouble)
+        
+prop_frobNorm3 :: Matrix (Complex CFloat) -> Bool
+prop_frobNorm3 m = 2 * realPart (abs (a - b)) / (realPart (abs a + abs b)) <= 1e-6
+  where a = frobNorm m 
+        b = sqrt $ sum $ map (^2) $ matrixList RowMajor m
+        
+prop_frobNorm4 :: Matrix (Complex CDouble) -> Bool
+prop_frobNorm4 m = 2 * realPart (abs (a - b)) / (realPart (abs a + abs b)) <= 1e-8
+  where a = frobNorm m 
+        b = sqrt $ sum $ map (^2) $ matrixList RowMajor m
