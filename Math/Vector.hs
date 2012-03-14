@@ -43,8 +43,6 @@ module Math.Vector (
     -- * Conversion From And To Lists
     listVector,
     vectorList,
-    -- * Inner product
-    module Math.InnerProduct,
     
     -- * IO Functions
     copyVector,
@@ -65,7 +63,6 @@ import BLAS.Foreign.BlasOps
 import BLAS.Foreign.LAPACKE
 import BLAS.Foreign.LapackeOps
 import Math.Internal
-import Math.InnerProduct
 import Math.IMM
 import Math.Indexable
 
@@ -91,12 +88,61 @@ class (BlasOps e, GVector vec e, Show (vec e)) => CVector vec e where
   inc :: vec e -> Index
 
 
+
 {-| Vector/vector operations. -}
 class (CVector vec e) => VectorVector vec e where
   -- | Vector addition
   (||+) :: vec e -> vec e -> vec e
-  -- | Vector subtraction
+  v1 ||+ v2 = modifyVector v1 $ vectorAdd 1 v2
+    -- | Vector subtraction
   (||-) :: vec e -> vec e -> vec e
+  v1 ||- v2 = modifyVector v1 $ vectorAdd (-1) v2
+  -- | Dot product
+  (||*) :: vec e -> vec e -> e
+  v1 ||* v2 = innerProduct v1 v2
+
+
+innerProduct :: (BlasOps e, CVector vec e) => vec e -> vec e -> e
+innerProduct v1 v2 | n == n2 = unsafePerformIO $
+    withCVector v1 $ \p1 ->
+    withCVector v2 $ \p2 ->
+    dot n p1 (inc v1) p2 (inc v2)
+        where
+            n = vectorLength v1
+            n2 = vectorLength v2
+innerProduct _ _ | otherwise = error "innerProduct: vectors must have same length."
+{-# SPECIALIZE NOINLINE innerProduct :: Vector CFloat -> Vector CFloat -> CFloat #-}
+{-# SPECIALIZE NOINLINE innerProduct :: Vector CDouble -> Vector CDouble -> CDouble #-}
+{-# SPECIALIZE NOINLINE innerProduct :: Vector (Complex CFloat) -> Vector (Complex CFloat) -> Complex CFloat #-}
+{-# SPECIALIZE NOINLINE innerProduct :: Vector (Complex CDouble) -> Vector (Complex CDouble) -> Complex CDouble #-}
+
+
+innerProductReal :: (BlasOpsReal e, CVector vec e) => vec e -> vec e -> CDouble
+innerProductReal v1 v2 | n == n2 = realToFrac $ unsafePerformIO $
+    withCVector v1 $ \p1 ->
+    withCVector v2 $ \p2 ->
+    realdot n p1 (inc v1) p2 (inc v2)
+        where
+            n = vectorLength v1
+            n2 = vectorLength v2
+innerProductReal _ _ | otherwise = error "innerProduct: vectors must have same length."
+
+
+innerProductC :: (RealFloat e, BlasOpsComplex e, CVector vec (Complex e)) =>
+    vec (Complex e)
+    -> vec (Complex e)
+    -> Complex e
+innerProductC v1 v2 | n == n2 = unsafePerformIO $
+    withCVector v1 $ \p1 ->
+    withCVector v2 $ \p2 ->
+    with (0 :+ 0) $ \pret ->
+    dotu_sub n p1 (inc v1) p2 (inc v2) pret >> peek pret
+        where
+          n = vectorLength v1
+          n2 = vectorLength v2
+innerProductC _ _ | otherwise = error "innerProduct: vectors must have same length."
+
+
 
 {-| Vector manipulations by a scalar. -}
 class (CVector vec e) => VectorScalar vec e where
@@ -137,11 +183,7 @@ instance (BlasOps e) => CVector Vector e where
 instance BlasOps e => Indexable (Vector e) Index e where
     v ! i = unsafePerformIO $ unsafeGetElem v i
 
-
-instance BlasOps e => VectorVector Vector e where
-  v1 ||+ v2 = modifyVector v1 $ vectorAdd 1 v2
-  v1 ||- v2 = modifyVector v1 $ vectorAdd (-1) v2
-
+instance BlasOps e => VectorVector Vector e
 instance BlasOps e => VectorScalar Vector e
 
 vectorList :: GVector vec e => vec e -> [e]
@@ -210,14 +252,8 @@ instance (BlasOps e, Num e, Fractional e) => Floating (Vector e) where
   atanh = vectorMap atanh
   acosh = vectorMap acosh
   
-
-instance (BlasOps e, BlasOpsReal e, CVector vec e) => InnerProduct (vec e) e where
-    innerProduct = innerProductReal
-
-instance (RealFloat e, BlasOpsComplex e, CVector vec (Complex e)) =>
-    InnerProduct (vec (Complex e)) (Complex e) where
-    innerProduct = innerProductC
-
+  
+  
 
 {-| Maps a unary function over the elements of a vector and returns the resulting vector. -}
 vectorMap :: (CVector vec1 e1, CVector vec2 e2) => (e1 -> e2) -> vec1 e1 -> vec2 e2
@@ -272,32 +308,6 @@ unsafeVectorBinMap f v1 v2 v3 =
     i2 = inc v2
     i3 = inc v3
     n = minimum [(vectorLength v1), (vectorLength v2), vectorLength v3]
-
-
-innerProductReal :: (BlasOpsReal e, CVector vec e) => vec e -> vec e -> e
-innerProductReal v1 v2 | n == n2 = realToFrac $ unsafePerformIO $
-    withCVector v1 $ \p1 ->
-    withCVector v2 $ \p2 ->
-    dot n p1 (inc v1) p2 (inc v2)
-        where
-            n = vectorLength v1
-            n2 = vectorLength v2
-innerProductReal _ _ | otherwise = error "innerProduct: vectors must have same length."
-
-
-innerProductC :: (RealFloat e, BlasOpsComplex e, CVector vec (Complex e)) =>
-    vec (Complex e)
-    -> vec (Complex e)
-    -> Complex e
-innerProductC v1 v2 | n == n2 = unsafePerformIO $
-    withCVector v1 $ \p1 ->
-    withCVector v2 $ \p2 ->
-    with (0 :+ 0) $ \pret ->
-    dotu_sub n p1 (inc v1) p2 (inc v2) pret >> peek pret
-        where
-          n = vectorLength v1
-          n2 = vectorLength v2
-innerProductC _ _ | otherwise = error "innerProduct: vectors must have same length."
 
 
 {-| Computes v2 <- alpha * v1 + v2. The result is stored in the memory of v2, therefore this is
