@@ -19,8 +19,12 @@ Lapacke must be compiled "by hand".
    b) Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
       or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
 2. Unpack lapacke into "jalla/lapacke"
-3. Follow lapacke's instructions to build.
-   Note that Jalla expects the LAPACKE_... naming scheme, i.e. LAPACKE in upper case,
+3. Follow lapacke's instructions to build
+   OR use the shiny new SCons file provided to build lapacke
+   for use with jalla, which can be found in the lapacke/ sub-directory
+   in the jalla source code.
+   If you don't use the provided SCons file, 
+   note that Jalla expects the LAPACKE_... naming scheme, i.e. LAPACKE in upper case,
    the rest in lower case. That scheme is called LAPACK_NAME_PATTERN_MC in the LAPACKE make.inc
    file.
    Jalla also expects the define LAPACK_COMPLEX_STRUCTURE in the same make.inc.
