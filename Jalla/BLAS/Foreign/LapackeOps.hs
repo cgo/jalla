@@ -15,14 +15,14 @@
 -- They are, however, probably not needed.
 -----------------------------------------------------------------------------
 
-module BLAS.Foreign.LapackeOps 
+module Jalla.BLAS.Foreign.LapackeOps 
        (LapackeOps(..), LapackeOpsReal(..), LapackeOpsComplex(..)) where
 
-import BLAS.Foreign.BLAS
-import BLAS.Foreign.LAPACKE
+import Jalla.BLAS.Foreign.BLAS
+import Jalla.BLAS.Foreign.LAPACKE
 import Foreign
 import Foreign.C.Types
-import Math.Types
+import Jalla.Types
 
 instance LAPACKEEnum UpLo CChar where
   toLapacke Up = (toEnum . fromEnum) 'u'

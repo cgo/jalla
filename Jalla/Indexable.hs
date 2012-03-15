@@ -13,7 +13,7 @@
 -- | Indexable objects for Jalla.
 -----------------------------------------------------------------------------
 
-module Math.Indexable (
+module Jalla.Indexable (
     Indexable (..)
 ) where
 

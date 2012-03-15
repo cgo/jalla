@@ -14,13 +14,13 @@
 -- types.
 -----------------------------------------------------------------------------
 
-module BLAS.Foreign.BlasOps
+module Jalla.BLAS.Foreign.BlasOps
        (BlasOps(..), BlasOpsReal(..), BlasOpsComplex(..)) where
 
-import BLAS.Foreign.BLAS
+import Jalla.BLAS.Foreign.BLAS
 import Foreign
 import Foreign.C.Types
-import Math.Types
+import Jalla.Types
 
 
 convComplex :: (RealFloat a, RealFloat b) => Complex a -> Complex b

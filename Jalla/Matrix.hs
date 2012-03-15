@@ -17,7 +17,7 @@ ExistentialQuantification, ScopedTypeVariables, TypeFamilies #-}
 -----------------------------------------------------------------------------
 
 
-module Math.Matrix
+module Jalla.Matrix
        (
          -- * Classes
          -- ** Matrices
@@ -31,7 +31,7 @@ module Math.Matrix
          -- ** Matrix/Scalar Operations
          MatrixScalar(..),
         -- ** Indexable
-         module Math.Indexable,
+         module Jalla.Indexable,
          -- * Data types
          Matrix,
          Order(..),
@@ -68,7 +68,7 @@ module Math.Matrix
         rows,
         columns,
          -- ** Functions From IMM Can Be Used
-        module Math.IMM,
+        module Jalla.IMM,
 
         -- * Printing Matrices
         prettyPrintMatrix,
@@ -123,14 +123,15 @@ module Math.Matrix
         Complex
         ) where
 
-import BLAS.Foreign.BLAS
-import BLAS.Foreign.BlasOps
-import BLAS.Foreign.LAPACKE
-import BLAS.Foreign.LapackeOps
-import Math.Internal
-import Math.IMM
-import Math.Vector
-import Math.Indexable
+import Jalla.BLAS.Foreign.BLAS
+import Jalla.BLAS.Foreign.BlasOps
+import Jalla.BLAS.Foreign.LAPACKE
+import Jalla.BLAS.Foreign.LapackeOps
+import Jalla.Internal
+import Jalla.IMM
+import Jalla.Vector
+import Jalla.Indexable
+import Jalla.Types
 
 import Foreign.C.Types
 import Foreign.Marshal.Array
@@ -139,7 +140,6 @@ import Data.Ix
 import Data.Complex
 import Data.List (partition)
 import Data.Maybe (fromJust)
-import Math.Types
 import Control.Monad.State
 import Data.Convertible
 

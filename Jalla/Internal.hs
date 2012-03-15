@@ -14,7 +14,7 @@
 -----------------------------------------------------------------------------
 
 
-module Math.Internal where
+module Jalla.Internal where
 
 import Foreign
 import Foreign.Ptr

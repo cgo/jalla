@@ -1,18 +1,41 @@
-{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances #-}
 
-module Math.Test (Arbitrary(..),
-                  prop_pseudoInverse,
-                  prop_frobNorm,
-                  prop_frobNorm2,
-                  prop_frobNorm3,
-                  prop_frobNorm4) where
+module Main (main,
+             Arbitrary(..),
+             prop_pseudoInverse,
+             prop_frobNorm,
+             prop_frobNorm2,
+             prop_frobNorm3,
+             prop_frobNorm4) where
 
-import BLAS.Foreign.BlasOps
-import Math.Matrix
-import Math.Vector
-import Math.Types
-import Test.QuickCheck
+import Jalla.BLAS.Foreign.BlasOps
+import Jalla.Matrix
+import Jalla.Vector
+import Jalla.Types
 import System.Random
+
+
+import Test.Framework (defaultMain, testGroup)
+import Test.Framework.Providers.HUnit
+import Test.Framework.Providers.QuickCheck2 (testProperty)
+
+import Test.QuickCheck
+import Test.HUnit
+
+import Data.List
+
+
+main = defaultMain tests
+
+tests = [
+  testGroup "Matrix Norms" [
+     testProperty "frob1" prop_frobNorm,
+     testProperty "frob2" prop_frobNorm2,
+     testProperty "frob3" prop_frobNorm3,
+     testProperty "frob4" prop_frobNorm4
+     ]
+  ]
+
 
 
 --instance (Random a, CMatrix mat a) => Random (mat a) where
@@ -24,7 +47,7 @@ instance (Random e, RealFloat e) => Random (Complex e) where
           (b',g')  = random g''
   randomR (a :+ b, c :+ d) g = (a' :+ b', g')
     where (a', g'') = randomR (a,c) g
-          (b', g')  = randomR (b,d) g
+          (b', g')  = randomR (b,d) g''
 
 
 class Bounds a where
@@ -64,7 +87,7 @@ prop_frobNorm2 m = (2 * abs (a - b) / (abs a + abs b)) <= 1e-6
         b = realToFrac ((sqrt $ sum $ map ((^2) . realToFrac) $ matrixList RowMajor m) :: CDouble)
         
 prop_frobNorm3 :: Matrix (Complex CFloat) -> Bool
-prop_frobNorm3 m = 2 * realPart (abs (a - b)) / (realPart (abs a + abs b)) <= 1e-6
+prop_frobNorm3 m = 2 * realPart (abs (a - b)) / (realPart (abs a + abs b)) <= 1e-5
   where a = frobNorm m 
         b = sqrt $ sum $ map (^2) $ matrixList RowMajor m
         
