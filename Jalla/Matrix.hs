@@ -184,6 +184,9 @@ class (Field1 e, Indexable (mat e) IndexPair e) => GMatrix mat e where
 
   -- (!) :: mat e -> IndexPair -> e
 
+infixl 7 ##, ##!
+infixl 6 ##-, ##+
+
 class (Field1 e, BlasOps e, GMatrix mat e, CMatrix mat e) => MatrixMatrix mat e where
   (##) :: mat e -> mat e -> mat e
   (##!) :: (mat e, Transpose) -> (mat e, Transpose) -> mat e
@@ -199,10 +202,15 @@ class (Field1 e, BlasOps e, GMatrix mat e, CMatrix mat e) => MatrixMatrix mat e 
   m1 ##- m2 = matrixBinMap (\a b -> a - b) m1 m2
 
 
+infixl 7 #|,|#
+
 class (CMatrix mat e, CVector vec e) => MatrixVector mat vec e where
   (#|) :: mat e -> vec e -> vec e
   (|#) :: vec e -> mat e -> vec e
 
+
+infixl 7 #.*,#./
+infixl 6 #.+,#.-
 
 {-| Matrix operations with a scalar. 
     The nomenclature is to be read /Matrix - Scalar - [operation name]/,
