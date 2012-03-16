@@ -88,6 +88,8 @@ class (BlasOps e, GVector vec e, Show (vec e)) => CVector vec e where
   inc :: vec e -> Index
 
 
+infixl 7 ||*
+infixl 6 ||+,||-
 
 {-| Vector/vector operations. -}
 class (CVector vec e) => VectorVector vec e where
@@ -143,6 +145,8 @@ innerProductC v1 v2 | n == n2 = unsafePerformIO $
 innerProductC _ _ | otherwise = error "innerProduct: vectors must have same length."
 
 
+infixl 7 |.*,|./
+infixl 6 |.+,|.-
 
 {-| Vector manipulations by a scalar. -}
 class (CVector vec e) => VectorScalar vec e where
