@@ -25,12 +25,12 @@ extra-source-files:
 extra-tmp-files:
 
 Library
-  exposed-modules: Jalla.Indexable Jalla.IMM Jalla.InnerProduct
+  exposed-modules: Jalla Jalla.Indexable Jalla.IMM Jalla.InnerProduct
                    Jalla.BLAS.Foreign.BLAS Jalla.BLAS.Foreign.BlasOps Jalla.BLAS.Foreign.LAPACKE
-                   Jalla.BLAS.Foreign.LapackeOps Jalla.Matrix Jalla.Vector Jalla.Types
+                   Jalla.BLAS.Foreign.LapackeOps Jalla.Matrix Jalla.Vector Jalla.Types Jalla.Test
 
   build-depends: base -any, mtl -any,
-                 convertible -any,  random (>=1.0.1)
+                 convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
 
   -- exposed: True
   buildable: True
