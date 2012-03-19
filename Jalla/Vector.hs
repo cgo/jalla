@@ -96,7 +96,7 @@ class (CVector vec e) => VectorVector vec e where
   -- | Vector addition
   (||+) :: vec e -> vec e -> vec e
   v1 ||+ v2 = modifyVector v1 $ vectorAdd 1 v2
-    -- | Vector subtraction
+  -- | Vector subtraction
   (||-) :: vec e -> vec e -> vec e
   v1 ||- v2 = modifyVector v1 $ vectorAdd (-1) v2
   -- | Dot product
