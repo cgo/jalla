@@ -18,11 +18,16 @@ Lapacke must be compiled "by hand".
       If you have that version, use that. Otherwise, follow b).
    b) Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
       or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
-2. Unpack lapacke into "jalla/lapacke"
-3. Follow lapacke's instructions to build
-   OR use the shiny new SCons file provided to build lapacke
+2. Unpack lapacke into "./lapacke" in the top jalla directory.
+3. (Follow lapacke's instructions to build)
+   /OR/ use the shiny new SCons file provided to build lapacke
    for use with jalla, which can be found in the lapacke/ sub-directory
    in the jalla source code.
+
+   Note that now, you can also let the Setup.hs script do the work right before configuring:
+    runhaskell Setup.hs configure --user --flags="build_lapacke"
+   should build lapacke right before configuring jalla.   
+
    If you don't use the provided SCons file, 
    note that Jalla expects the LAPACKE_... naming scheme, i.e. LAPACKE in upper case,
    the rest in lower case. That scheme is called LAPACK_NAME_PATTERN_MC in the LAPACKE make.inc
@@ -40,8 +45,8 @@ Please contact the author at github at goschs dot de if anything does not work!
 
 Documentation
 -------------
-The haddock documentation is not complete and rather sparse.
-This will change.
+The haddock documentation is not complete, but not so bad anymore.
+I will add more. The most important things are documented.
 
 
 Status
