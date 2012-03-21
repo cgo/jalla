@@ -4,8 +4,8 @@ cabal-version: (>=1.8)
 build-type: Simple
 license: BSD3
 license-file: LICENSE
-copyright:
-maintainer: Christian Gosch <werbung@goschs.de>
+copyright: 2011 by Christian Gosch
+maintainer: Christian Gosch <github@goschs.de>
 stability: Experimental
 homepage: https://github.com/cgo/jalla
 package-url:
@@ -24,6 +24,11 @@ data-dir: ""
 extra-source-files:
 extra-tmp-files:
 
+Flag build_lapacke
+     -- needs to be added to the command line, like so: runhaskell Setup.hs configure --user --flags="build_lapacke"
+     Description: If true, try to build lapacke in the ./lapacke directory of the jalla package.
+     Default: False
+
 Library
   exposed-modules: Jalla Jalla.Indexable Jalla.IMM Jalla.InnerProduct
                    Jalla.BLAS.Foreign.BLAS Jalla.BLAS.Foreign.BlasOps Jalla.BLAS.Foreign.LAPACKE
@@ -32,7 +37,6 @@ Library
   build-depends: base -any, mtl -any,
                  convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
 
-  -- exposed: True
   buildable: True
   build-tools: c2hs -any
   cpp-options:
