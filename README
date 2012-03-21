@@ -33,7 +33,7 @@ Lapacke must be compiled "by hand".
     cabal configure
     cabal build
     cabal haddock
-5. Look at the (currently somewhat sparse) generated documentation
+5. Look at the generated documentation, which is getting better now.
 
 Please contact the author at github at goschs dot de if anything does not work!
 
