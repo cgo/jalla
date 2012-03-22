@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module Jalla.BLAS.Foreign.LAPACKE
+module Jalla.Foreign.LAPACKE
        --(CblasOrder (..),
        -- CblasTranspose (..),
        -- CblasUplo (..),

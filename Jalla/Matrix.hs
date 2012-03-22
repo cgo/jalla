@@ -123,10 +123,10 @@ module Jalla.Matrix
         Complex
         ) where
 
-import Jalla.BLAS.Foreign.BLAS
-import Jalla.BLAS.Foreign.BlasOps
-import Jalla.BLAS.Foreign.LAPACKE
-import Jalla.BLAS.Foreign.LapackeOps
+import Jalla.Foreign.BLAS
+import Jalla.Foreign.BlasOps
+import Jalla.Foreign.LAPACKE
+import Jalla.Foreign.LapackeOps
 import Jalla.Internal
 import Jalla.IMM
 import Jalla.Vector
@@ -135,7 +135,9 @@ import Jalla.Types
 
 import Foreign.C.Types
 import Foreign.Marshal.Array
-import Foreign
+import Foreign hiding (unsafePerformIO)
+import System.IO.Unsafe (unsafePerformIO)
+
 import Data.Ix
 import Data.Complex
 import Data.List (partition)

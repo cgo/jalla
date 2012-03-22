@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module Jalla.BLAS.Foreign.BLAS
+module Jalla.Foreign.BLAS
        --(CblasOrder (..),
        -- CblasTranspose (..),
        -- CblasUplo (..),

@@ -14,10 +14,10 @@
 -- types.
 -----------------------------------------------------------------------------
 
-module Jalla.BLAS.Foreign.BlasOps
+module Jalla.Foreign.BlasOps
        (BlasOps(..), BlasOpsReal(..), BlasOpsComplex(..)) where
 
-import Jalla.BLAS.Foreign.BLAS
+import Jalla.Foreign.BLAS
 import Foreign
 import Foreign.C.Types
 import Jalla.Types

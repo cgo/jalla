@@ -15,11 +15,11 @@
 -- They are, however, probably not needed.
 -----------------------------------------------------------------------------
 
-module Jalla.BLAS.Foreign.LapackeOps 
+module Jalla.Foreign.LapackeOps 
        (LapackeOps(..), LapackeOpsReal(..), LapackeOpsComplex(..)) where
 
-import Jalla.BLAS.Foreign.BLAS
-import Jalla.BLAS.Foreign.LAPACKE
+import Jalla.Foreign.BLAS
+import Jalla.Foreign.LAPACKE
 import Foreign
 import Foreign.C.Types
 import Jalla.Types

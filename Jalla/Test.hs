@@ -4,7 +4,7 @@ module Jalla.Test where
 
 import Jalla.Matrix
 import Jalla.Vector
-import Jalla.BLAS.Foreign.BlasOps
+import Jalla.Foreign.BlasOps
 import Jalla.Types
 
 import System.Random

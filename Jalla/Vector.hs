@@ -47,9 +47,9 @@ module Jalla.Vector (
     -- * IO Functions
     copyVector,
     
-    -- * Low-level, unsafe functions
-    unsafeVectorAdd,
+    -- * Unsafe Functions
     unsafeCopyVector,
+    unsafeVectorAdd,
     
     -- * Re-exported
     CFloat,
@@ -58,10 +58,10 @@ module Jalla.Vector (
 ) where
 
 
-import Jalla.BLAS.Foreign.BLAS
-import Jalla.BLAS.Foreign.BlasOps
-import Jalla.BLAS.Foreign.LAPACKE
-import Jalla.BLAS.Foreign.LapackeOps
+import Jalla.Foreign.BLAS
+import Jalla.Foreign.BlasOps
+import Jalla.Foreign.LAPACKE
+import Jalla.Foreign.LapackeOps
 import Jalla.Internal
 import Jalla.IMM
 import Jalla.Indexable
@@ -69,7 +69,8 @@ import Jalla.Types
 
 import Foreign.C.Types
 import Foreign.Marshal.Array
-import Foreign
+import Foreign hiding (unsafePerformIO)
+import System.IO.Unsafe (unsafePerformIO)
 import Data.Ix
 import Data.Complex
 import Control.Monad.State
@@ -270,6 +271,93 @@ vectorMap f v1 = unsafePerformIO $
 {-# SPECIALIZE NOINLINE vectorMap :: (Complex CFloat -> Complex CFloat) -> Vector (Complex CFloat) -> Vector (Complex CFloat) #-}
 {-# SPECIALIZE NOINLINE vectorMap :: (Complex CDouble -> Complex CDouble) -> Vector (Complex CDouble) -> Vector (Complex CDouble) #-}
 
+
+
+{-| Maps a binary function to the elements of two vectors and returns the resulting vector. -}
+vectorBinMap :: (CVector vec1 e1, CVector vec2 e2, CVector vec3 e3) => 
+                (e1 -> e2 -> e3)    -- ^ The function /f/ to map.
+                -> vec1 e1 -- ^ The first input vector /v1/ for /f/.
+                -> vec2 e2 -- ^ The second input vector /v2/ for /f/.
+                -> vec3 e3 -- ^ The result vector. It will have length min(l1,l2), where l1,l2 are the lengths of /v1/ and /v2/.
+vectorBinMap f v1 v2 = unsafePerformIO $
+                       vectorAlloc n >>= \v3 -> unsafeVectorBinMap f v1 v2 v3 >> return v3
+  where n = min (vectorLength v1) (vectorLength v2)
+
+
+
+
+{-| Make a copy of the input vector. Using the cblas_*copy functions. -}
+copyVector :: (BlasOps e, CVector vec e, CVector vec2 e) => vec e -> IO (vec2 e)
+copyVector v = vectorAlloc n >>= \ret ->
+               withCVector v $ \p ->
+               withCVector ret $ \pret ->
+               copy n p (inc v) pret (inc ret) >> return ret
+               where n = vectorLength v
+
+
+
+--------------------------
+-- Monadic vector manipulations
+
+type VMMMonad vec e a = StateT (vec e) IO a
+
+newtype VMM s vec e a = VMM { unVMM :: VMMMonad vec e a } deriving Monad
+
+runVMM :: CVector vec e => vec e -> VMM s vec e a -> IO a
+runVMM v action = evalStateT action' v
+  where
+    action' = unVMM action
+
+
+instance (BlasOps e, CVector vec e) => IMM (VMM s vec e) Index (vec e) e where
+--    create   = createVector
+--    modify   = modifyVector
+--    getO     = getVector
+    setElem  = setElem'
+    setElems = setElems'
+    fill     = fill'
+    getElem  = getElem'
+
+
+createVector :: CVector vec e => Index -> VMM s vec e a -> vec e
+createVector n action = unsafePerformIO $
+                        vectorAlloc n >>= \mv -> runVMM mv (action >> (VMM get))
+
+getVector :: CVector vec e => VMM s vec e (vec e)
+getVector = VMM get
+
+modifyVector :: CVector vec e => vec e -> VMM s vec e a -> vec e
+modifyVector v action = unsafePerformIO $
+  copyVector v >>= \nv -> runVMM nv (action >> (VMM get))
+  where
+    n = vectorLength v
+
+{-| Adds alpha * v to the current vector. -}
+vectorAdd :: CVector vec e => e -> vec e -> VMM s vec e ()
+vectorAdd alpha x = VMM $ (get >>= \v -> liftIO $ unsafeVectorAdd alpha x v)
+
+
+{-| unsafeSetElem may fail gracefully,
+therefore this method may or may not set the element, depending on a successful range check. -}
+setElem' :: CVector vec e => Index -> e -> VMM s vec e ()
+setElem' i e = VMM $ (get >>= \v -> liftIO $ unsafeSetElem v i e >> return ())
+
+setElems' :: CVector vec e => [(Index,e)] -> VMM s vec e ()
+setElems' ies = VMM $ (get >>= \v -> liftIO $ mapM_ (\(i,e) -> unsafeSetElem v i e) ies)
+
+{-| Note: getElem' returns a Maybe. -}
+getElem' :: CVector vec e => Index -> VMM s vec e e
+getElem' i = VMM $ get >>= \v -> liftIO (unsafeGetElem v i)
+
+fill' :: CVector vec e => e -> VMM s vec e ()
+fill' e = VMM $ get >>= \v -> liftIO (unsafeFillVector v e)
+
+
+
+---------------------------------------------------------------------------------------
+-- Unsafe functions.
+---------------------------------------------------------------------------------------
+
 unsafeVectorMap :: (CVector vec1 e1, CVector vec2 e2) => (e1 -> e2) -> vec1 e1 -> vec2 e2 -> IO ()
 unsafeVectorMap f v1 v2 = 
   withCVector v1 $ \v1p ->
@@ -285,16 +373,18 @@ unsafeVectorMap f v1 v2 =
 {-# SPECIALIZE INLINE unsafeVectorMap :: (Complex CDouble -> Complex CDouble) -> Vector (Complex CDouble) -> Vector (Complex CDouble) -> IO () #-}
 
 
-{-| Maps a binary function to the elements of two vectors and returns the resulting vector. -}
-vectorBinMap :: (CVector vec1 e1, CVector vec2 e2, CVector vec3 e3) => 
-                (e1 -> e2 -> e3)    -- ^ The function /f/ to map.
-                -> vec1 e1 -- ^ The first input vector /v1/ for /f/.
-                -> vec2 e2 -- ^ The second input vector /v2/ for /f/.
-                -> vec3 e3 -- ^ The result vector. It will have length min(l1,l2), where l1,l2 are the lengths of /v1/ and /v2/.
-vectorBinMap f v1 v2 = unsafePerformIO $
-                       vectorAlloc n >>= \v3 -> unsafeVectorBinMap f v1 v2 v3 >> return v3
-  where n = min (vectorLength v1) (vectorLength v2)
-
+{-| Copies from one vector to the other, in-place and therefore unsafely.
+Uses the BLAS 'copy' function. /min (vectorLength src) (vectorlength dest)/
+elements are copied from the first to the second vector. -}
+unsafeCopyVector :: (CVector vec e, CVector vec2 e) => 
+                    vec e    -- ^ The source vector.
+                    -> vec2 e -- ^ The destination vector.
+                    -> IO ()
+unsafeCopyVector src dest =
+  withCVector src $ \srcp -> 
+  withCVector dest $ \destp ->
+  copy n srcp (inc src) destp (inc dest)
+  where n = min (vectorLength src) (vectorLength dest)
 
 unsafeVectorBinMap :: (CVector vec1 e1, CVector vec2 e2, CVector vec3 e3) => 
                       (e1 -> e2 -> e3) 
@@ -359,83 +449,3 @@ unsafeFillVector v e =
 --    f i p n = poke p e >> f i (advancePtr p i) (n - 1) where {p' = advancePtr p i; n' = n - 1 }
     i = inc v
     n = vectorLength v
-
-
-{-| Make a copy of the input vector. Using the cblas_*copy functions. -}
-copyVector :: (BlasOps e, CVector vec e, CVector vec2 e) => vec e -> IO (vec2 e)
-copyVector v = vectorAlloc n >>= \ret ->
-               withCVector v $ \p ->
-               withCVector ret $ \pret ->
-               copy n p (inc v) pret (inc ret) >> return ret
-               where n = vectorLength v
-
-
-{-| Copies from one vector to the other, in-place and therefore unsafely.
-Uses the BLAS 'copy' function. /min (vectorLength src) (vectorlength dest)/
-elements are copied from the first to the second vector. -}
-unsafeCopyVector :: (CVector vec e, CVector vec2 e) => 
-                    vec e    -- ^ The source vector.
-                    -> vec2 e -- ^ The destination vector.
-                    -> IO ()
-unsafeCopyVector src dest =
-  withCVector src $ \srcp -> 
-  withCVector dest $ \destp ->
-  copy n srcp (inc src) destp (inc dest)
-  where n = min (vectorLength src) (vectorLength dest)
-
---------------------------
--- Monadic vector manipulations
-
-type VMMMonad vec e a = StateT (vec e) IO a
-
-newtype VMM s vec e a = VMM { unVMM :: VMMMonad vec e a } deriving Monad
-
-runVMM :: CVector vec e => vec e -> VMM s vec e a -> IO a
-runVMM v action = evalStateT action' v
-  where
-    action' = unVMM action
-
-
-instance (BlasOps e, CVector vec e) => IMM (VMM s vec e) Index (vec e) e where
---    create   = createVector
---    modify   = modifyVector
---    getO     = getVector
-    setElem  = setElem'
-    setElems = setElems'
-    fill     = fill'
-    getElem  = getElem'
-
-
-createVector :: CVector vec e => Index -> VMM s vec e a -> vec e
-createVector n action = unsafePerformIO $
-                        vectorAlloc n >>= \mv -> runVMM mv (action >> (VMM get))
-
-getVector :: CVector vec e => VMM s vec e (vec e)
-getVector = VMM get
-
-modifyVector :: CVector vec e => vec e -> VMM s vec e a -> vec e
-modifyVector v action = unsafePerformIO $
-  copyVector v >>= \nv -> runVMM nv (action >> (VMM get))
-  where
-    n = vectorLength v
-
-{-| Adds alpha * v to the current vector. -}
-vectorAdd :: CVector vec e => e -> vec e -> VMM s vec e ()
-vectorAdd alpha x = VMM $ (get >>= \v -> liftIO $ unsafeVectorAdd alpha x v)
-
-
-{-| unsafeSetElem may fail gracefully,
-therefore this method may or may not set the element, depending on a successful range check. -}
-setElem' :: CVector vec e => Index -> e -> VMM s vec e ()
-setElem' i e = VMM $ (get >>= \v -> liftIO $ unsafeSetElem v i e >> return ())
-
-setElems' :: CVector vec e => [(Index,e)] -> VMM s vec e ()
-setElems' ies = VMM $ (get >>= \v -> liftIO $ mapM_ (\(i,e) -> unsafeSetElem v i e) ies)
-
-{-| Note: getElem' returns a Maybe. -}
-getElem' :: CVector vec e => Index -> VMM s vec e e
-getElem' i = VMM $ get >>= \v -> liftIO (unsafeGetElem v i)
-
-fill' :: CVector vec e => e -> VMM s vec e ()
-fill' e = VMM $ get >>= \v -> liftIO (unsafeFillVector v e)
-
