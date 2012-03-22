@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module Jalla.Foreign.BLAS
+module Numeric.Jalla.Foreign.BLAS
        --(CblasOrder (..),
        -- CblasTranspose (..),
        -- CblasUplo (..),
@@ -12,7 +12,7 @@ module Jalla.Foreign.BLAS
 import C2HS
 import Foreign.C.Types
 import Foreign.Ptr
-import Jalla.Types
+import Numeric.Jalla.Types
 import Data.Complex
 
 #include <cblas.h>

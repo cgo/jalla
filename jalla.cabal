@@ -1,28 +1,32 @@
 name: jalla
-version: 0.1
+version: 0.1.0
 cabal-version: (>=1.8)
 build-type: Simple
 license: BSD3
 license-file: LICENSE
-copyright: 2011 by Christian Gosch
+copyright: 2011-2012, Christian Gosch
 maintainer: Christian Gosch <github@goschs.de>
 stability: Experimental
 homepage: https://github.com/cgo/jalla
 package-url:
 bug-reports:
-synopsis: Aims to provide higher level functions for linear algebra and comes with wrappers around BLAS and LAPACKE.
+synopsis: Higher level functions for linear algebra. Wraps BLAS and LAPACKE.
 description: Jalla aims at providing high level functions for linear algebra computations which
   should be fast and easy enough to use. Under the hood, BLAS and LAPACKE are used 
   (LAPACKE is a standard C interface to LAPACK which is part of LAPACK since version 3.4).
   Currently, I am adding new functions whenever I find some time. Please help, if you want to!
-  There are not many tests, and we need some nicer error reporting (nicer than exceptions).
+  There are not many tests yet, and we need some nicer error reporting (nicer than exceptions).
 category: Math
 author: Christian Gosch
 tested-with: GHC (>= 7.0.3)
 data-files:
 data-dir: ""
-extra-source-files:
+extra-source-files: lapacke/SConstruct lapacke/include/lapacke.h lapacke/include/lapacke_config.h lapacke/include/lapacke_utils.h lapacke/LICENSE README
 extra-tmp-files:
+
+source-repository head
+  type: git
+  location: git://github.com/cgo/jalla.git
 
 Flag build_lapacke
      -- needs to be added to the command line, like so: runhaskell Setup.hs configure --user --flags="build_lapacke"
@@ -30,11 +34,12 @@ Flag build_lapacke
      Default: False
 
 Library
-  exposed-modules: Jalla Jalla.Indexable Jalla.IMM Jalla.InnerProduct
-                   Jalla.Foreign.BLAS Jalla.Foreign.BlasOps Jalla.Foreign.LAPACKE
-                   Jalla.Foreign.LapackeOps Jalla.Matrix Jalla.Vector Jalla.Types Jalla.Test
+  exposed-modules: Numeric.Jalla Numeric.Jalla.Indexable Numeric.Jalla.IMM Numeric.Jalla.InnerProduct
+                   Numeric.Jalla.Foreign.BLAS Numeric.Jalla.Foreign.BlasOps Numeric.Jalla.Foreign.LAPACKE
+                   Numeric.Jalla.Foreign.LapackeOps Numeric.Jalla.Matrix Numeric.Jalla.Vector 
+                   Numeric.Jalla.Types Numeric.Jalla.Test
 
-  build-depends: base -any, mtl -any,
+  build-depends: base > 4.0.0 && < 4.6.0, mtl -any,
                  convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
 
   buildable: True
@@ -57,10 +62,10 @@ Library
   include-dirs: ./lapacke/include
   -- include-dirs: /home/christian/pgm/lapack-3.4.0/lapacke/include
   hs-source-dirs: .
-  other-modules: C2HS Jalla.Internal
+  other-modules: C2HS Numeric.Jalla.Internal
   ghc-prof-options: -prof -auto-all
   ghc-shared-options:
-  ghc-options: -threaded
+  ghc-options: 
   hugs-options:
   nhc98-options:
   jhc-options:

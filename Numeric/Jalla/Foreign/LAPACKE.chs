@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module Jalla.Foreign.LAPACKE
+module Numeric.Jalla.Foreign.LAPACKE
        --(CblasOrder (..),
        -- CblasTranspose (..),
        -- CblasUplo (..),
@@ -12,7 +12,7 @@ module Jalla.Foreign.LAPACKE
 import C2HS
 import Foreign.C.Types
 import Foreign.Ptr
-import Jalla.Types
+import Numeric.Jalla.Types
 import Data.Complex
 
 #define LAPACK_NAME_PATTERN_MC 1

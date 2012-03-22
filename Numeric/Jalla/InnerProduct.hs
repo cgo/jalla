@@ -14,7 +14,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Jalla.InnerProduct (
+module Numeric.Jalla.InnerProduct (
     InnerProduct(..)
 ) where
 

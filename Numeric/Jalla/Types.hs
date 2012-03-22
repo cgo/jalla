@@ -12,7 +12,7 @@
 -- | Contains some types used by Jalla, including some BLAS/LAPACK related ones.
 -----------------------------------------------------------------------------
 
-module Jalla.Types (
+module Numeric.Jalla.Types (
   -- * Classes
   Field1(..),
   -- ** BLAS And LAPACK 

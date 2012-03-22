@@ -1,13 +1,13 @@
-module Jalla ( 
-  module Jalla.Foreign.BlasOps
-  , module Jalla.Foreign.LapackeOps
-  , module Jalla.Types
-  , module Jalla.Vector
-  , module Jalla.Matrix
+module Numeric.Jalla ( 
+  module Numeric.Jalla.Foreign.BlasOps
+  , module Numeric.Jalla.Foreign.LapackeOps
+  , module Numeric.Jalla.Types
+  , module Numeric.Jalla.Vector
+  , module Numeric.Jalla.Matrix
              ) where
 
-import Jalla.Foreign.BlasOps
-import Jalla.Foreign.LapackeOps
-import Jalla.Types
-import Jalla.Vector
-import Jalla.Matrix
+import Numeric.Jalla.Foreign.BlasOps
+import Numeric.Jalla.Foreign.LapackeOps
+import Numeric.Jalla.Types
+import Numeric.Jalla.Vector
+import Numeric.Jalla.Matrix

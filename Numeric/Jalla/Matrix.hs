@@ -17,7 +17,7 @@ ExistentialQuantification, ScopedTypeVariables, TypeFamilies #-}
 -----------------------------------------------------------------------------
 
 
-module Jalla.Matrix
+module Numeric.Jalla.Matrix
        (
          -- * Classes
          -- ** Matrices
@@ -31,7 +31,7 @@ module Jalla.Matrix
          -- ** Matrix/Scalar Operations
          MatrixScalar(..),
         -- ** Indexable
-         module Jalla.Indexable,
+         module Numeric.Jalla.Indexable,
          -- * Data types
          Matrix,
          Order(..),
@@ -68,7 +68,7 @@ module Jalla.Matrix
         rows,
         columns,
          -- ** Functions From IMM Can Be Used
-        module Jalla.IMM,
+        module Numeric.Jalla.IMM,
 
         -- * Printing Matrices
         prettyPrintMatrix,
@@ -123,15 +123,15 @@ module Jalla.Matrix
         Complex
         ) where
 
-import Jalla.Foreign.BLAS
-import Jalla.Foreign.BlasOps
-import Jalla.Foreign.LAPACKE
-import Jalla.Foreign.LapackeOps
-import Jalla.Internal
-import Jalla.IMM
-import Jalla.Vector
-import Jalla.Indexable
-import Jalla.Types
+import Numeric.Jalla.Foreign.BLAS
+import Numeric.Jalla.Foreign.BlasOps
+import Numeric.Jalla.Foreign.LAPACKE
+import Numeric.Jalla.Foreign.LapackeOps
+import Numeric.Jalla.Internal
+import Numeric.Jalla.IMM
+import Numeric.Jalla.Vector
+import Numeric.Jalla.Indexable
+import Numeric.Jalla.Types
 
 import Foreign.C.Types
 import Foreign.Marshal.Array

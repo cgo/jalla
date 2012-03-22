@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances #-}
 
-module Jalla.Test where
+module Numeric.Jalla.Test where
 
-import Jalla.Matrix
-import Jalla.Vector
-import Jalla.Foreign.BlasOps
-import Jalla.Types
+import Numeric.Jalla.Matrix
+import Numeric.Jalla.Vector
+import Numeric.Jalla.Foreign.BlasOps
+import Numeric.Jalla.Types
 
 import System.Random
 import Test.QuickCheck

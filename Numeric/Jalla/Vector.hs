@@ -15,7 +15,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Jalla.Vector (
+module Numeric.Jalla.Vector (
     -- * Classes
     -- ** Vectors
     GVector(..),
@@ -25,7 +25,7 @@ module Jalla.Vector (
     -- ** Vector/scalar operations
     VectorScalar(..),
     -- ** Indexable
-    module Jalla.Indexable,
+    module Numeric.Jalla.Indexable,
     -- * Data Types
     Vector(..),
     
@@ -35,7 +35,7 @@ module Jalla.Vector (
     getVector,
     createVector,
     modifyVector,
-    module Jalla.IMM,
+    module Numeric.Jalla.IMM,
     -- ** Vector maps
     vectorAdd,
     vectorMap,
@@ -58,14 +58,14 @@ module Jalla.Vector (
 ) where
 
 
-import Jalla.Foreign.BLAS
-import Jalla.Foreign.BlasOps
-import Jalla.Foreign.LAPACKE
-import Jalla.Foreign.LapackeOps
-import Jalla.Internal
-import Jalla.IMM
-import Jalla.Indexable
-import Jalla.Types
+import Numeric.Jalla.Foreign.BLAS
+import Numeric.Jalla.Foreign.BlasOps
+import Numeric.Jalla.Foreign.LAPACKE
+import Numeric.Jalla.Foreign.LapackeOps
+import Numeric.Jalla.Internal
+import Numeric.Jalla.IMM
+import Numeric.Jalla.Indexable
+import Numeric.Jalla.Types
 
 import Foreign.C.Types
 import Foreign.Marshal.Array
