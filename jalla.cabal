@@ -31,8 +31,8 @@ Flag build_lapacke
 
 Library
   exposed-modules: Jalla Jalla.Indexable Jalla.IMM Jalla.InnerProduct
-                   Jalla.BLAS.Foreign.BLAS Jalla.BLAS.Foreign.BlasOps Jalla.BLAS.Foreign.LAPACKE
-                   Jalla.BLAS.Foreign.LapackeOps Jalla.Matrix Jalla.Vector Jalla.Types Jalla.Test
+                   Jalla.Foreign.BLAS Jalla.Foreign.BlasOps Jalla.Foreign.LAPACKE
+                   Jalla.Foreign.LapackeOps Jalla.Matrix Jalla.Vector Jalla.Types Jalla.Test
 
   build-depends: base -any, mtl -any,
                  convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
@@ -41,7 +41,7 @@ Library
   build-tools: c2hs -any
   cpp-options:
   cc-options:
-  ld-options:
+  ld-options: 
   pkgconfig-depends:
   frameworks:
   c-sources:
