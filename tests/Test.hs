@@ -8,11 +8,11 @@ module Main (main,
              prop_frobNorm3,
              prop_frobNorm4) where
 
-import Jalla.BLAS.Foreign.BlasOps
-import Jalla.Matrix
-import Jalla.Vector
-import Jalla.Types
-import Jalla.Test
+import Numeric.Jalla.Foreign.BlasOps
+import Numeric.Jalla.Matrix
+import Numeric.Jalla.Vector
+import Numeric.Jalla.Types
+import Numeric.Jalla.Test
 import System.Random
 
 
@@ -64,7 +64,7 @@ prop_frobNorm2 m = (2 * abs (a - b) / (abs a + abs b)) <= 1e-6
         b = realToFrac ((sqrt $ sum $ map ((^2) . realToFrac) $ matrixList RowMajor m) :: CDouble)
         
 prop_frobNorm3 :: Matrix (Complex CFloat) -> Bool
-prop_frobNorm3 m = 2 * realPart (abs (a - b)) / (realPart (abs a + abs b)) <= 1e-5
+prop_frobNorm3 m = 2 * realPart (abs (a - b)) / (realPart (abs a + abs b)) <= 1e-4
   where a = frobNorm m 
         b = sqrt $ sum $ map (^2) $ matrixList RowMajor m
         

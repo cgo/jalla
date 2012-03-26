@@ -56,7 +56,7 @@ Library
   other-extensions:
   extensions:
   extra-libraries: lapacke lapack cblas f77blas
-  extra-lib-dirs: ./lapacke
+  -- extra-lib-dirs: ./lapacke
   includes:
   install-includes:
   include-dirs: ./lapacke/include
@@ -75,5 +75,6 @@ Test-suite tests
   Type: exitcode-stdio-1.0
   Hs-source-dirs: tests
   Main-is: Test.hs
+  ghc-options: -rtsopts -threaded
   Build-depends: base -any, jalla, random (>= 1.0.1), HUnit (>= 1.2.4), QuickCheck (>= 2.4.2), test-framework (>= 0.5), test-framework-hunit (>= 0.2.7), test-framework-quickcheck2 (>= 0.2.12)
   

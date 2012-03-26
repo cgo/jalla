@@ -14,10 +14,41 @@ synaptic, or any other such tool.
 Lapacke must be compiled "by hand".
 
 0. Get the jalla sources; say they are located in the directory "jalla/"
-1. a) LAPACKE is part of LAPACK since version 3.4.
-      If you have that version, use that. Otherwise, follow b).
-   b) Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
-      or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
+1. If you do not have LAPACKE installed, follow the instructions 
+   below under "Getting and building LAPACKE".
+2. In jalla/, call 
+    cabal configure
+    cabal build
+    cabal haddock
+3. Look at the generated documentation, which should be quite informative now.
+
+Please contact the author at github at goschs dot de if anything does not work!
+
+
+Getting and building LAPACKE
+----------------------------
+LAPACKE is part of LAPACK since version 3.4.
+If you have that version, use that. Otherwise:
+
+The following steps of getting and building 
+LAPACKE can be done with the script get_lapacke.sh.
+You must have *wget* and *scons* installed on your 
+system.
+From jalla's top level directory, call
+  ./get_lapacke.sh
+This should download lapacke and build it with our
+SConstruct file, in the sub-directory ./lapacke.
+You can source the file set_env.bash if you are using Bash,
+in order to set the LD_LIBRARY_PATH and LIBRARY_PATH
+variables.
+
+Note that you might as well get the newest sources of LAPACK from netlib,
+and copy the lapacke subdirectory from there over to the jalla directory.
+Both ways worked for me.
+
+If you want to get and build manually:
+1. Get Lapacke at <http://www.netlib.org/lapack/lapacke.tgz>
+   or at <http://www.netlib.org/lapack/#_standard_c_language_apis_for_lapack>
 2. Unpack lapacke into "./lapacke" in the top jalla directory.
 3. (Follow lapacke's instructions to build)
    /OR/ use the shiny new SCons file provided to build lapacke
@@ -34,13 +65,8 @@ Lapacke must be compiled "by hand".
    file.
    Jalla also expects the define LAPACK_COMPLEX_STRUCTURE in the same make.inc.
    This means that complex numbers are represented as C struct.   
-4. In jalla/, call 
-    cabal configure
-    cabal build
-    cabal haddock
-5. Look at the generated documentation, which is getting better now.
 
-Please contact the author at github at goschs dot de if anything does not work!
+
 
 
 Documentation
