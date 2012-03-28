@@ -5,4 +5,4 @@
 # Source this in bash; use analog commands in other shells.
 #
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/lapacke
-export LIBRARY_PATH=./lapacke
+export LIBRARY_PATH=`pwd`/lapacke
