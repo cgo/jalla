@@ -130,6 +130,7 @@ import Numeric.Jalla.Foreign.LapackeOps
 import Numeric.Jalla.Internal
 import Numeric.Jalla.IMM
 import Numeric.Jalla.Vector
+-- import Numeric.Jalla.CVector
 import Numeric.Jalla.Indexable
 import Numeric.Jalla.Types
 
@@ -573,7 +574,6 @@ instance (BlasOps e, Storable e) => Indexable (RefVector e) Index e where
            else error "RefVector range violation."
                        
 instance (Field1 e, Storable e, BlasOps e) => GVector RefVector e where
-  vector n = unsafePerformIO $ vectorAlloc n
   vectorLength = refVecLength
 
 instance BlasOps e => VectorVector RefVector e

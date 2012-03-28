@@ -43,10 +43,18 @@ Flag build_lapacke
      Default: False
 
 Library
-  exposed-modules: Numeric.Jalla Numeric.Jalla.Indexable Numeric.Jalla.IMM Numeric.Jalla.InnerProduct
-                   Numeric.Jalla.Foreign.BLAS Numeric.Jalla.Foreign.BlasOps Numeric.Jalla.Foreign.LAPACKE
-                   Numeric.Jalla.Foreign.LapackeOps Numeric.Jalla.Matrix Numeric.Jalla.Vector 
-                   Numeric.Jalla.Types Numeric.Jalla.Test
+  exposed-modules: Numeric.Jalla Numeric.Jalla.Indexable
+                   Numeric.Jalla.IMM
+                   Numeric.Jalla.InnerProduct
+                   Numeric.Jalla.Foreign.BLAS
+                   Numeric.Jalla.Foreign.BlasOps
+                   Numeric.Jalla.Foreign.LAPACKE
+                   Numeric.Jalla.Foreign.LapackeOps
+                   Numeric.Jalla.Matrix
+                   Numeric.Jalla.Vector
+                   Numeric.Jalla.CVector
+                   Numeric.Jalla.Types
+                   Numeric.Jalla.Test
 
   build-depends: base > 4.0.0 && < 4.6.0, mtl -any,
                  convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
