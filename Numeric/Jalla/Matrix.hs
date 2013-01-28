@@ -130,7 +130,6 @@ import Numeric.Jalla.Foreign.LapackeOps
 import Numeric.Jalla.Internal
 import Numeric.Jalla.IMM
 import Numeric.Jalla.Vector
--- import Numeric.Jalla.CVector
 import Numeric.Jalla.Indexable
 import Numeric.Jalla.Types
 
@@ -474,6 +473,7 @@ unsafeMatrixMult :: (BlasOps e, CMatrix mat e) =>
                  -- size is not checked!
     -> IO ()
 unsafeMatrixMult alpha transA a transB b beta c =
+  when (order a /= order b) $ error "unsafeMatrixMult: order of matrices must be equal."
   withCMatrix a $ \pa ->
   withCMatrix b $ \pb ->
   withCMatrix c $ \pc ->
@@ -780,7 +780,7 @@ frobNorm mat = sqrt $ sum $ map (\v -> v ||* v) vs
 
 matrixAlloc' :: (BlasOps e) => Shape -> IO (Matrix e)
 matrixAlloc' (r,c) = mallocForeignPtrArray (r * c) >>=
-                     \p -> return $ Matrix p (r,c) c RowMajor
+                     \p -> return $ Matrix p (r,c) r ColumnMajor
 
 
 checkIndex :: Shape -> IndexPair -> Bool
@@ -885,7 +885,7 @@ matrixMap' f mat = matrixAlloc s >>= \mRet ->
 
 
 
-{-| Create a list of elements, in row-major order, from the given matrix. -}
+{-| Create a list of elements, in the given order, from the given matrix. -}
 matrixList :: (GMatrix mat e) => Order -> mat e -> [e]
 matrixList o mat | o == RowMajor = [mat ! (i,j) | i <- [0..(r-1)], j <- [0..(c-1)]]
                  | o == ColumnMajor = [mat ! (i,j) | j <- [0..(c-1)], i <- [0..(r-1)]]
@@ -908,7 +908,7 @@ listMatrix :: (BlasOps e, CMatrix mat e) =>
            Shape -- ^ Shape of the matrix
            -> [e] -- ^ List of elements, row-major order
            -> mat e -- ^ If the number of elements in the list matches the number needed for the given shape exactly, returns a Just Matrix; otherwise, returns Nothing.
-listMatrix (r,c) l = if c < 0 || c < 0
+listMatrix (r,c) l = if c < 0 || r < 0
                      then error "Negative matrix shape??"
                      else createMatrix (r,c) $ setElems' $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
                             -- mapM (uncurry setElem) $ zip [(i,j) | i <- [0..(r-1)], j <- [0..(c-1)]] l
