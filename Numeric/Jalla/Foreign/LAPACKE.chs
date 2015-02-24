@@ -9,9 +9,11 @@ module Numeric.Jalla.Foreign.LAPACKE
        -- CblasIndex)
        where
 
-import C2HS
+-- import C2HS
 import Foreign.C.Types
 import Foreign.Ptr
+import Foreign.Storable
+import Foreign.Marshal
 import Numeric.Jalla.Types
 import Data.Complex
 

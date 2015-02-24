@@ -56,7 +56,7 @@ Library
                    Numeric.Jalla.Types
                    Numeric.Jalla.Test
 
-  build-depends: base > 4.0.0 && < 4.6.0, mtl -any,
+  build-depends: base > 4.0.0 && < 4.6.1, mtl -any,
                  convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
 
   buildable: True
@@ -64,7 +64,7 @@ Library
   cpp-options:
   cc-options:
   ld-options: 
-  pkgconfig-depends:
+  -- pkgconfig-depends: lapacke, cblas
   frameworks:
   c-sources:
   default-language:
@@ -72,14 +72,14 @@ Library
   default-extensions:
   other-extensions:
   extensions:
-  extra-libraries: lapacke lapack cblas f77blas
-  -- extra-lib-dirs: ./lapacke
+  extra-libraries: lapacke, cblas, f77blas
+  extra-lib-dirs: /home/christian/pgm/jalla.git/lib
   includes:
   install-includes:
   include-dirs: ./lapacke/include
-  -- include-dirs: /home/christian/pgm/lapack-3.4.0/lapacke/include
+  -- include-dirs: 
   hs-source-dirs: .
-  other-modules: C2HS Numeric.Jalla.Internal
+  other-modules: Numeric.Jalla.Internal
   ghc-prof-options: -prof -auto-all
   ghc-shared-options:
   ghc-options: 

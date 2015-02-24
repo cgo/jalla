@@ -472,20 +472,20 @@ unsafeMatrixMult :: (BlasOps e, CMatrix mat e) =>
     -> mat e      -- ^ Matrix C -- This is changed in place and /must/ be of the correct size! The
                  -- size is not checked!
     -> IO ()
-unsafeMatrixMult alpha transA a transB b beta c =
+unsafeMatrixMult alpha transA a transB b beta c = do
   when (order a /= order b) $ error "unsafeMatrixMult: order of matrices must be equal."
   withCMatrix a $ \pa ->
-  withCMatrix b $ \pb ->
-  withCMatrix c $ \pc ->
-  gemm (toBlas $ order a) transA' transB' m n k alpha pa ldA pb ldB beta pc ldC
-    where
-      (m,k)   = shapeTrans transA $ shape a
-      n       = colCountTrans transB $ shape b
-      ldA     = lda a
-      ldB     = lda b
-      ldC     = lda c
-      transA' = toBlas transA
-      transB' = toBlas transB
+    withCMatrix b $ \pb ->
+    withCMatrix c $ \pc ->
+    gemm (toBlas $ order a) transA' transB' m n k alpha pa ldA pb ldB beta pc ldC
+      where
+        (m,k)   = shapeTrans transA $ shape a
+        n       = colCountTrans transB $ shape b
+        ldA     = lda a
+        ldB     = lda b
+        ldC     = lda c
+        transA' = toBlas transA
+        transB' = toBlas transB
 
 
 

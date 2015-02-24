@@ -82,7 +82,7 @@ prop_matrixMultDiag mat = frobNorm (matrixMultDiag (mat,NoTrans) (map realToFrac
         dm'   = createMatrix (m,n) act
         act   = fill 0 >> (setDiag 0 $ map realToFrac [1..])
 
-prop_matrixMultDiagC :: (BlasOpsComplex a, RealFloat a) => Matrix (Complex a) -> Bool
+prop_matrixMultDiagC :: (BlasOpsComplex a, RealFloat a, Storable a) => Matrix (Complex a) -> Bool
 prop_matrixMultDiagC mat = realPart (frobNorm (a ##- mat ## dm)) < 1e-7 &&
                            realPart (frobNorm (b ##- (mat,Trans) ##! (dm',NoTrans))) < 1e-7
   where 

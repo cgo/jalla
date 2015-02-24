@@ -60,7 +60,7 @@ module C2HS (
 import Foreign
 import Foreign.C
 
-import Control.Monad (liftM)
+import Monad (liftM)
 
 
 -- Composite marshalling functions
@@ -224,7 +224,7 @@ cFromBool  = fromBool
 
 -- |Obtain Haskell 'Bool' from C value.
 --
-cToBool :: (Eq a, Num a) => a -> Bool
+cToBool :: Num a => a -> Bool
 cToBool  = toBool
 
 -- |Convert a C enumeration to Haskell.

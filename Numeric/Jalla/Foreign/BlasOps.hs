@@ -15,10 +15,11 @@
 -----------------------------------------------------------------------------
 
 module Numeric.Jalla.Foreign.BlasOps
-       (BlasOps(..), BlasOpsReal(..), BlasOpsComplex(..)) where
+       (BlasOps(..), BlasOpsReal(..), BlasOpsComplex(..), Storable) where
 
 import Numeric.Jalla.Foreign.BLAS
 import Foreign
+import Foreign.Storable (Storable)
 import Foreign.C.Types
 import Numeric.Jalla.Types
 

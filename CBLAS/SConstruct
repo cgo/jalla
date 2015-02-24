@@ -52,5 +52,5 @@ env.Append (LIBS = ['blas', 'm'])
 env.Append (CPPPATH = ['../include', './include'])
 #env.Append (LIBPATH = ['/usr/lib/atlas-base/'])
 
-env.SharedLibrary ('cblas', cblas_sources + cblas_sources_f)
-env.StaticLibrary ('cblas', cblas_sources + cblas_sources_f)
+env.SharedLibrary ('cblas', cblas_sources_f + cblas_sources)
+env.StaticLibrary ('cblas', cblas_sources_f + cblas_sources)
