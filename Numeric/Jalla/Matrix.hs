@@ -142,6 +142,7 @@ import Data.Ix
 import Data.Complex
 import Data.List (partition)
 import Data.Maybe (fromJust)
+import Control.Applicative
 import Control.Monad.State
 import Data.Convertible
 
@@ -932,7 +933,7 @@ prettyPrintMatrixIO m = mapM_ putStrLn $ prettyPrintMatrix m
 type MMonad mat e = StateT (mat e) IO
 
 {-| Matrix modification monad. This is used for creating and modifying matrices efficiently. -}
-newtype MMM s mat e a = MMM { unMMM :: MMonad mat e a } deriving (Monad, Functor)
+newtype MMM s mat e a = MMM { unMMM :: MMonad mat e a } deriving (Monad, Applicative, Functor)
 -- newtype (BlasOps e, CMatrix mat e) => MMM s mat e a = MMM { unMMM :: MMonad mat e a } deriving (Monad, Functor)
 
 
