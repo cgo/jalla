@@ -1,0 +1,1 @@
+../../../dist/build/Numeric/Jalla/Foreign/LAPACKE.hs
