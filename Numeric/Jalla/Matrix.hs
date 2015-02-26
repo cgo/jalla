@@ -324,10 +324,11 @@ unsafeMatrixBinMap f mat mat' mat'' =
 {-| This is the instance of 'CMatrix' that Jalla provides.
     If you don't have another 'CMatrix' instance, 'Matrix'
     is the one you will want to use. -}
-data BlasOps e => Matrix e = Matrix { matP :: !(ForeignPtr e),
-                                     matShape :: !Shape,
-                                     matLDA :: !Index,
-                                     matOrder :: !Order }
+-- data BlasOps e => Matrix e = Matrix { matP :: !(ForeignPtr e),
+data Matrix e = Matrix { matP :: !(ForeignPtr e),
+                         matShape :: !Shape,
+                         matLDA :: !Index,
+                         matOrder :: !Order }
 
 
 instance (Num e, Field1 e, BlasOps e) => GMatrix Matrix e where
@@ -553,7 +554,8 @@ pseudoInverse a = (matrixMultDiag (vt,Trans) s, NoTrans) ##! (u,Trans)
 saving some cost on copying and memory allocation. The referenced matrix will not be
 garbage collected (if I understand 'ForeignPtr' right) before one of the 'RefVector's
 referencing it. -}
-data Storable e => RefVector e = RefVector {
+-- data Storable e => RefVector e = RefVector {
+data RefVector e = RefVector {
   refRefP :: !(ForeignPtr e),
   refVecP :: !(Ptr e),
   refVecInc :: !Index,
@@ -687,7 +689,8 @@ svdJobs (SVDU u,SVDVT vt) = (svdJob u, svdJob vt)
 
 
 {-| Description of the result of a singular value decomposition with 'svd'. -}
-data (CMatrix mat e) => SVD mat e = SVD { 
+-- data (CMatrix mat e) => SVD mat e = SVD {
+data SVD mat e = SVD { 
   -- | The left, unitary matrix U. Nothing if the /SVDU SVDNone/ was selected.
   svdU :: Maybe (mat e)
   -- | The right singular vectors, VT (transposed, so the vectors are in the rows). Nothing if /SVDVT SVDNone/ was selected.
@@ -929,7 +932,8 @@ prettyPrintMatrixIO m = mapM_ putStrLn $ prettyPrintMatrix m
 type MMonad mat e = StateT (mat e) IO
 
 {-| Matrix modification monad. This is used for creating and modifying matrices efficiently. -}
-newtype (BlasOps e, CMatrix mat e) => MMM s mat e a = MMM { unMMM :: MMonad mat e a } deriving (Monad, Functor)
+newtype MMM s mat e a = MMM { unMMM :: MMonad mat e a } deriving (Monad, Functor)
+-- newtype (BlasOps e, CMatrix mat e) => MMM s mat e a = MMM { unMMM :: MMonad mat e a } deriving (Monad, Functor)
 
 
 -- Make a copy of the matrix, put it in the state, and let modification functions run on it.

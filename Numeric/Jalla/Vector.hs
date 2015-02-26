@@ -44,9 +44,10 @@ import Data.Convertible
 {-| Vector is the 'CVector' type that is used in Jalla. 
 Somehow Haddock does not want to create documentation for the class instances 
 of 'Vector', I try to figure it out. -}
-data BlasOps e => Vector e = Vector {vecP :: !(ForeignPtr e),
-                                    vecInc :: !Index,
-                                    vecLength :: !Index}
+-- data BlasOps e => Vector e = Vector {vecP :: !(ForeignPtr e),
+data Vector e = Vector {vecP :: !(ForeignPtr e),
+                        vecInc :: !Index,
+                        vecLength :: !Index}
 
 
 vectorAlloc' :: (BlasOps e) => Index -> IO (Vector e)
