@@ -25,6 +25,13 @@ Lapacke must be compiled "by hand".
 Please contact the author at github at goschs dot de if anything does not work!
 
 
+Using Arch Linux
+----------------
+On a current Arch Linux, you just need to install
+the lapack package, and you should be good to go.
+LAPACKE is included in that package.
+
+
 Getting and building LAPACKE
 ----------------------------
 LAPACKE is part of LAPACK since version 3.4.
@@ -86,4 +93,4 @@ Please also tell me if you have a greater interest in this project and want to p
 License
 -------
 See the file LICENSE.
-This project is under a BSD3-style license.
+
