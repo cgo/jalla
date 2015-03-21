@@ -2,9 +2,9 @@ name: jalla
 version: 0.1.1.0
 cabal-version: (>=1.8)
 build-type: Simple
-license: BSD3
+license: GPL
 license-file: LICENSE
-copyright: 2011-2012, Christian Gosch
+copyright: 2011-2015, Christian Gosch
 maintainer: Christian Gosch <github@goschs.de>
 stability: Experimental
 homepage: https://github.com/cgo/jalla
@@ -76,7 +76,7 @@ Library
   extra-lib-dirs: /home/christian/pgm/jalla.git/lib
   includes:
   install-includes:
-  include-dirs: ./lapacke/include
+  -- include-dirs: ./lapacke/include
   -- include-dirs: 
   hs-source-dirs: .
   other-modules: Numeric.Jalla.Internal
