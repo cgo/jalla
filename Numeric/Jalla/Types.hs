@@ -34,6 +34,7 @@ module Numeric.Jalla.Types (
 ) where
 
 import Data.Complex
+import Data.Orphans ()
 import Foreign.C.Types
 import Foreign.Marshal.Array
 import Foreign
@@ -89,22 +90,6 @@ class LAPACKEEnum e le where
 
 f :: Complex a -> a
 f _ = undefined
-
-instance (RealFloat a, Storable a) => Storable (Complex a) where
-  -- sizeOf c = s where s = 2 * (sizeOf (f c))
-  sizeOf = (2 *) . sizeOf . f
-  alignment = alignment . f
-
-  peek p = peek p1 >>= \r -> peek p2 >>= \i -> return $ r :+ i
-    where
-      p1 = castPtr p
-      p2 = advancePtr p1 1
-
-  poke p c = poke p' r >> poke (advancePtr p' 1) i
-    where p' = castPtr p
-          r = realPart c
-          i = imagPart c
-
 
 {-| Defines a scalar type for each field type. Those are 'Complex' 'CFloat'
     and 'CFloat', as well as 'Complex' 'CDouble' and 'CDouble'. -}

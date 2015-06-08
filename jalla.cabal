@@ -56,7 +56,7 @@ Library
                    Numeric.Jalla.Types
                    Numeric.Jalla.Test
 
-  build-depends: base > 4.0.0 && < 4.7.1, mtl -any,
+  build-depends: base > 4.0.0 && < 4.7.1, base-orphans (>= 0.3.2), mtl -any,
                  convertible -any,  random (>=1.0.1), QuickCheck (>= 2.4.2)
 
   buildable: True
