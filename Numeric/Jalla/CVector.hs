@@ -206,7 +206,7 @@ copyVector v = vectorAlloc n >>= \ret ->
 
 type VMMMonad vec e a = StateT (vec e) IO a
 
-newtype VMM s vec e a = VMM { unVMM :: VMMMonad vec e a } deriving Monad
+newtype VMM s vec e a = VMM { unVMM :: VMMMonad vec e a } deriving (Applicative, Functor, Monad)
 
 runVMM :: CVector vec e => vec e -> VMM s vec e a -> IO a
 runVMM v action = evalStateT action' v
