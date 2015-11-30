@@ -38,6 +38,8 @@ x_regex = re.compile ('xx\.c$|sx\.c$|xx_work\.c$|sx_work\.c$') # |^cla_|^sla_')
 testing_regex = re.compile ('.*lapacke_[sdcz]la')
 # Functions apparently not available in stock Ubuntu 11.10 LAPACK, only in LAPACK 3.4.0
 other_regex = re.compile ('qrt\.c$|qrt2\.c$|qrt3\.c|rfb\.c$|qrt_work\.c$|qrt2_work\.c$|qrt3_work\.c|rfb_work\.c$')
+# These are not available in the version of LAPACK that comes with OS X up to at least El Capitan.
+osx_elcapitan_regex = re.compile ('geqrf\.c$|geqrfp\.c$|geqrfp_work\.c$')
 
 # Filtering out XBLAS dependencies
 lapacke_sources = filter (lambda fn: x_regex.search(fn) == None, glob.glob ('src/*.c'))
@@ -45,6 +47,10 @@ lapacke_sources = filter (lambda fn: x_regex.search(fn) == None, glob.glob ('src
 lapacke_sources = filter (lambda fn: testing_regex.search(fn) == None, lapacke_sources)
 # Filtering out other (new 3.4.0 functions??) dependencies
 lapacke_sources = filter (lambda fn: other_regex.search(fn) == None, lapacke_sources)
+
+# Filtering out things which are apparently not in OSX Accelerate framework.
+# They apparently still use LAPACK 3.2.1.
+lapacke_sources = filter (lambda fn: osx_elcapitan_regex.search(fn) == None, lapacke_sources)
 
 env.Append (CCFLAGS = '-DHAVE_LAPACK_CONFIG_H  -DLAPACK_COMPLEX_STRUCTURE')
 env.Append (LIBS = ['lapack', 'cblas', 'm'])

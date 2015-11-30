@@ -61,18 +61,25 @@ Library
 
   buildable: True
   build-tools: c2hs -any
+  if os(darwin)
+    cpp-options: -D__APPLE__ -D__MACH__
   cpp-options:
   cc-options:
   ld-options: 
   -- pkgconfig-depends: lapacke, cblas
-  frameworks:
+  if os(darwin)
+    frameworks: Accelerate
+
   c-sources:
   default-language:
   other-languages:
   default-extensions:
   other-extensions:
   extensions:
-  extra-libraries: lapacke, cblas, blas
+  if !os(darwin)
+    extra-libraries: lapacke, cblas, blas
+  else
+    extra-libraries: lapacke
   extra-lib-dirs: /home/christian/pgm/jalla.git/lib
   includes:
   install-includes:
@@ -84,7 +91,7 @@ Library
   ghc-shared-options:
   ghc-options: 
   hugs-options:
-  nhc98-options:
+    nhc98-options:
   jhc-options:
 
 
