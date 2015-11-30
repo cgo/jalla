@@ -62,7 +62,7 @@ Library
   buildable: True
   build-tools: c2hs -any
   if os(darwin)
-    cpp-options: -D__APPLE__ -D__MACH__
+    cpp-options: -D__APPLE__ -I/System/Library/Frameworks/Accelerate.framework/Headers -I/System/Library/Frameworks/Accelerate.framework/Frameworks/vecLib.framework/Headers
   cpp-options:
   cc-options:
   ld-options: 

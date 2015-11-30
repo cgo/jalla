@@ -15,11 +15,8 @@ import Foreign.Ptr
 import Numeric.Jalla.Types
 import Data.Complex
 
-#if defined(__APPLE__) && defined(__MACH__)
-# include <Accelerate.h>
-#else
-# include <cblas.h>
-#endif
+#include <cblas.h>
+
 
 type CblasIndex = Integer
 
